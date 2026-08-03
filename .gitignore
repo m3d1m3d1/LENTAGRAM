@@ -20,3 +20,5 @@ data/
 .DS_Store
 Thumbs.dbtest.py
 test.py
+telethon_worker.py
+.env.example
