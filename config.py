@@ -1,5 +1,13 @@
 import os
+from pathlib import Path
 from dotenv import load_dotenv
+
+# Проверяем наличие .env файла перед загрузкой
+env_path = Path(__file__).parent / ".env"
+if not env_path.exists():
+    raise FileNotFoundError(
+        "Файл .env не найден. Создайте файл .env в корне проекта и добавьте необходимые переменные окружения."
+    )
 
 load_dotenv()
 
