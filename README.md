@@ -1,417 +1,385 @@
-# Lentagram AI 🤖
+# Lentagram Bot - Telegram News Aggregator
 
-[English version below](#lentagram-ai-)
+[![CI/CD](https://github.com/yourusername/lentagram-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/yourusername/lentagram-bot/actions)
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**Интеллектуальная платформа для мониторинга Telegram с использованием искусственного интеллекта**
+🤖 **Lentagram** — умный агрегатор новостей в Telegram с AI-фильтрацией и персонализированными лентами.
 
-Lentagram автоматически собирает информацию из Telegram-каналов, анализирует содержание сообщений с помощью LLM, классифицирует контент и формирует персонализированные информационные ленты.
+---
+
+## 📋 Содержание
+
+- [Возможности](#-возможности)
+- [Быстрый старт](#-быстрый-старт)
+- [Архитектура проекта](#-архитектура-проекта)
+- [Tech Stack](#-tech-stack)
+- [Конфигурация](#-конфигурация)
+- [Запуск в Docker](#-запуск-в-docker)
+- [Разработка и тестирование](#-разработка-и-тестирование)
+- [Troubleshooting](#-troubleshooting)
+
+---
+
+## ✨ Возможности
+
+### Для пользователей
+- 📰 **Персонализированные ленты** — создавайте собственные новостные потоки
+- 🔗 **Мультиканальность** — подключайте несколько каналов к одной ленте
+- 🧠 **AI-фильтрация** — автоматический анализ контента через LLM (Gemini, Groq, OpenRouter)
+- 📊 **Аналитика** — отслеживайте лайки/дизлайки для улучшения рекомендаций
+- 🎯 **Умная группировка** — альбомы медиа отправляются единым сообщением
+
+### Для разработчиков
+- 🐳 **Docker-контейнеризация** — готовый образ для развёртывания
+- ✅ **CI/CD pipeline** — автоматические тесты и сборка
+- 🧪 **Покрытие тестами** — unit и integration тесты
+- 📝 **Миграции БД** — версионирование схемы базы данных
+- 🪵 **Профессиональное логирование** — цветной вывод + ротация файлов
+- 🔄 **Retry-логика** — обработка временных ошибок сети
+- 🔒 **Валидация настроек** — Pydantic Settings для type-safe конфигурации
 
 ---
 
 ## 🚀 Быстрый старт
 
+### Предварительные требования
+
+- Python 3.12+
+- Telegram Bot Token ([получить у @BotFather](https://t.me/BotFather))
+- Telegram API ID и Hash ([получить на my.telegram.org](https://my.telegram.org))
+
 ### 1. Клонирование репозитория
+
 ```bash
-git clone <repository-url>
-cd lentagram
+git clone https://github.com/yourusername/lentagram-bot.git
+cd lentagram-bot
 ```
 
 ### 2. Установка зависимостей
+
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. Настройка переменных окружения
-Создайте файл `.env` в корне проекта:
+### 3. Настройка окружения
+
+Скопируйте пример файла окружения:
 
 ```bash
 cp .env.example .env
 ```
 
-Или создайте вручную и добавьте следующие переменные:
+Отредактируйте `.env` и добавьте ваши ключи:
 
 ```env
-# Обязательные параметры
-TELEGRAM_BOT_TOKEN=your_bot_token_here
-API_ID=your_api_id_here
-API_HASH=your_api_hash_here
+TELEGRAM_BOT_TOKEN=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
+API_ID=12345678
+API_HASH=abcdef1234567890abcdef1234567890
 
-# Опционально: сессия Telethon (если есть)
-TELETHON_SESSION=
+# Опционально: AI сервисы для фильтрации
+GEMINI_API_KEY=your_gemini_key
+GROQ_API_KEY=your_groq_key
+OPENROUTER_API_KEY=your_openrouter_key
 
-# Опционально: ключи для AI-классификаторов
-OPENROUTER_API_KEY=
-GEMINI_API_KEY=
-GROQ_API_KEY=
+# Опционально: настройки
+LOG_LEVEL=INFO
+DATABASE_PATH=bot_database.db
 ```
 
-**Где получить credentials:**
-- `TELEGRAM_BOT_TOKEN`: создайте бота через [@BotFather](https://t.me/BotFather)
-- `API_ID` и `API_HASH`: получите на [my.telegram.org](https://my.telegram.org/apps)
-
 ### 4. Запуск бота
+
 ```bash
 python main.py
 ```
 
-При первом запуске бот запросит авторизацию в Telegram (номер телефона и код подтверждения).
-
 ---
 
-## ✨ Основные возможности
-
-### 🧠 AI Content Processing
-
-- **LLM-классификация постов** — автоматическое определение тематики контента
-- **Определение релевантности** — фильтрация постов по заданной теме
-- **Автоматическое создание summary** — краткое изложение содержания поста
-- **Тематическая категоризация** — распределение по категориям
-- **Персональные рекомендации** — адаптация на основе feedback пользователя
-
-### 📡 Telegram Intelligence
-
-- **Мониторинг каналов через Telethon** — отслеживание новых постов в реальном времени
-- **Создание пользовательских лент** — группировка каналов по темам
-- **Обработка медиа-контента** — поддержка фото, видео, документов и альбомов
-- **Управление источниками** — добавление/удаление каналов
-
-### 🎯 Personalization
-
-- **Пользовательские темы интересов** — настройка фильтров для каждой ленты
-- **Feedback loop** — лайки/дизлайки для обучения модели
-- **Адаптация рекомендаций** — учёт предпочтений пользователя
-
----
-
-## 🏗️ Архитектура
+## 🏗️ Архитектура проекта
 
 ```
-                 Telegram API
-                     |
-                     |
-              Telethon Listener
-                     |
-                     |
-              Message Pipeline
-                     |
-        --------------------------
-        |                        |
-     AI Engine               Database
-        |
- -----------------
- |       |       |
-LLM   Summary  Embeddings
-
-
-                     |
-                     |
-               Telegram Bot
-                     |
-                   User
+lentagram-bot/
+├── main.py                 # Точка входа, настройка application
+├── config.py               # Конфигурация (Pydantic Settings)
+├── config_new.py           # Новая типизированная конфигурация
+├── requirements.txt        # Зависимости Python
+├── Dockerfile              # Docker образ
+├── .env.example            # Шаблон переменных окружения
+├── .github/workflows/
+│   └── ci.yml              # CI/CD pipeline
+│
+├── handlers/               # Обработчики событий Telegram
+│   ├── commands.py         # Команды бота (/start, /help)
+│   ├── feeds.py            # Управление лентами
+│   └── channels.py         # Управление каналами
+│
+├── services/               # Бизнес-логика
+│   ├── database.py         # Работа с БД
+│   ├── migrations.py       # Миграции БД
+│   ├── channel_service.py  # Сервис каналов
+│   ├── telethon_client.py  # Telethon клиент
+│   └── ai/                 # AI модули
+│       ├── analyzer.py     # Анализ контента
+│       ├── classifier.py   # Классификация постов
+│       ├── summarizer.py   # Саммаризация текста
+│       └── llm_client.py   # Клиент для LLM API
+│
+├── utils/                  # Утилиты
+│   ├── logger.py           # Настройка логирования
+│   ├── error_handling.py   # Retry-логика и Circuit Breaker
+│   └── text.py             # Текстовые утилиты
+│
+├── tests/                  # Тесты
+│   ├── test_main.py        # Основные тесты
+│   └── conftest.py         # pytest конфигурация
+│
+└── logs/                   # Логи (создаётся автоматически)
+    └── bot.log
 ```
 
 ---
 
 ## 🛠️ Tech Stack
 
-### Backend
-
-- Python 3.11+
-- AsyncIO
-- python-telegram-bot v21.6
-- Telethon v1.36.0
-
-### AI
-
-- OpenRouter API (Llama models)
-- Google Generative AI (Gemini)
-- Groq API
-- Prompt Engineering
-- RAG architecture (planned)
-- Vector Search (planned)
-
-### Storage
-
-**Current:**
-- SQLite
-
-**Planned migration:**
-- PostgreSQL
-- Redis (cache)
-- Qdrant (vector search)
-
-### DevOps
-
-- Linux VPS
-- Docker (planned)
-- Git
-- Systemd
+| Категория | Технологии |
+|-----------|------------|
+| **Язык** | Python 3.12+ |
+| **Telegram Bot** | python-telegram-bot v21.6 |
+| **Telegram Client** | Telethon v1.36.0 |
+| **База данных** | SQLite3 + миграции |
+| **AI/LLM** | Google Gemini, Groq, OpenRouter, Anthropic |
+| **Конфигурация** | Pydantic Settings, python-dotenv |
+| **Логирование** | logging с ротацией файлов |
+| **Тестирование** | pytest, pytest-asyncio, pytest-cov |
+| **CI/CD** | GitHub Actions |
+| **Контейнеризация** | Docker, Docker Compose |
+| **Linting** | flake8 |
 
 ---
 
-## 📁 Структура проекта
+## ⚙️ Конфигурация
 
-```
-/workspace
-├── main.py                 # Точка входа, настройка бота
-├── config.py               # Переменные окружения
-├── requirements.txt        # Зависимости
-├── README.md              # Документация
-├── handlers/
-│   ├── commands.py        # Обработчики команд (/start, /help)
-│   ├── feeds.py           # Управление лентами
-│   └── channels.py        # Управление каналами
-├── services/
-│   ├── database.py        # Инициализация БД, подключения
-│   ├── channel_service.py # Слой доступа к данным
-│   ├── telethon_client.py # Telethon менеджер
-│   └── ai/
-│       ├── analyzer.py    # AI-анализ постов
-│       └── classifier.py  # Классификация
-└── utils/
-    └── text.py            # Утилиты для работы с текстом
+### Обязательные переменные
+
+| Переменная | Описание | Пример |
+|------------|----------|--------|
+| `TELEGRAM_BOT_TOKEN` | Токен бота от @BotFather | `123456:ABC-...` |
+| `API_ID` | API ID из my.telegram.org | `12345678` |
+| `API_HASH` | API Hash из my.telegram.org | `abc123...` |
+
+### Опциональные переменные
+
+| Переменная | Описание | По умолчанию |
+|------------|----------|--------------|
+| `TELETHON_SESSION` | Сессия Telethon | `""` |
+| `GEMINI_API_KEY` | Ключ Google Gemini API | `None` |
+| `GROQ_API_KEY` | Ключ Groq API | `None` |
+| `OPENROUTER_API_KEY` | Ключ OpenRouter API | `None` |
+| `ANTHROPIC_API_KEY` | Ключ Anthropic API | `None` |
+| `LOG_LEVEL` | Уровень логирования | `INFO` |
+| `DATABASE_PATH` | Путь к базе данных | `bot_database.db` |
+| `REQUEST_TIMEOUT` | Таймаут запросов (сек) | `30` |
+| `MAX_RETRIES` | Макс. количество попыток | `3` |
+
+### AI-фильтрация
+
+Бот поддерживает несколько AI-провайдеров. Если ключ не задан — фильтрация отключена, бот работает в обычном режиме.
+
+Для включения AI-фильтрации добавьте хотя бы один ключ:
+
+```env
+GEMINI_API_KEY=your_key_here
 ```
 
 ---
 
-## ⚙️ Конфигурация AI-фильтрации
+## 🐳 Запуск в Docker
 
-AI-фильтрация включена по умолчанию для новых лент. Для управления:
+### Сборка образа
 
-1. Выберите ленту в меню «Мои ленты»
-2. Нажмите «⚙️ AI-фильтр» для включения/отключения
-3. При создании ленты можно указать тему для более точной фильтрации
+```bash
+docker build -t lentagram-bot .
+```
+
+### Запуск контейнера
+
+```bash
+docker run -d \
+  --name lentagram \
+  --restart unless-stopped \
+  -v $(pwd)/.env:/app/.env \
+  -v $(pwd)/data:/app/data \
+  lentagram-bot
+```
+
+### Docker Compose (рекомендуется)
+
+Создайте `docker-compose.yml`:
+
+```yaml
+version: '3.8'
+
+services:
+  bot:
+    build: .
+    container_name: lentagram-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "python", "-c", "print('OK')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+```
+
+Запуск:
+
+```bash
+docker-compose up -d
+```
+
+Просмотр логов:
+
+```bash
+docker-compose logs -f bot
+```
+
+---
+
+## 🧪 Разработка и тестирование
+
+### Запуск тестов
+
+```bash
+# Все тесты
+pytest tests/ -v
+
+# С покрытием кода
+pytest tests/ -v --cov=. --cov-report=html
+
+# Один конкретный тест
+pytest tests/test_main.py::TestConfig::test_settings_validation -v
+```
+
+### Линтинг кода
+
+```bash
+flake8 . --max-line-length=127 --statistics
+```
+
+### Проверка типов (опционально)
+
+Установите mypy:
+
+```bash
+pip install mypy
+mypy . --ignore-missing-imports
+```
+
+### Добавление новых миграций
+
+1. Откройте `services/migrations.py`
+2. Добавьте новую миграцию в список `MIGRATIONS`:
+
+```python
+MIGRATIONS = [
+    # ... существующие миграции
+    (
+        "004_add_new_feature",
+        """
+        CREATE TABLE IF NOT EXISTS new_table (...);
+        """
+    ),
+]
+```
+
+3. Миграция применится автоматически при следующем запуске
 
 ---
 
 ## 🔧 Troubleshooting
 
-### Ошибка «Файл .env не найден»
-Создайте файл `.env` в корне проекта (см. раздел «Настройка»)
+### Ошибка: "Файл .env не найден"
 
-### Ошибка авторизации Telethon
-Запустите `get_session_string.py` для получения session string
+**Решение:** Создайте файл `.env` в корне проекта или скопируйте шаблон:
 
-### Посты не приходят
-- Проверьте, что канал добавлен в ленту
-- Убедитесь, что AI-фильтр не отклоняет посты
-- Проверьте логи на наличие ошибок
+```bash
+cp .env.example .env
+```
 
-### Проблемы с медиа-альбомами
-Если медиафайлы разбиваются на отдельные сообщения, убедитесь, что используется последняя версия кода с поддержкой grouped_id
+### Ошибка: "Не все обязательные переменные окружения установлены"
+
+**Решение:** Проверьте наличие в `.env`:
+- `TELEGRAM_BOT_TOKEN`
+- `API_ID`
+- `API_HASH`
+
+### Бот не запускается в Docker
+
+**Решение:**
+1. Проверьте пути к томам в docker-compose.yml
+2. Убедитесь что `.env` файл доступен внутри контейнера
+3. Проверьте логи: `docker-compose logs bot`
+
+### AI-фильтрация не работает
+
+**Решение:**
+1. Проверьте что добавлен хотя бы один API ключ (GEMINI, GROQ, OPENROUTER)
+2. Проверьте лимиты API вашего провайдера
+3. Включите debug-логирование: `LOG_LEVEL=DEBUG`
+
+### Ошибки подключения к Telegram
+
+**Решение:**
+1. Проверьте правильность API_ID и API_HASH
+2. Убедитесь что сессия Telethon действительна
+3. При использовании прокси настройте переменные окружения
+
+---
+
+## 🤝 Contributing
+
+Мы приветствуем вклад в проект! 
+
+### Как внести изменения
+
+1. Fork репозиторий
+2. Создайте feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit изменения (`git commit -m 'Add amazing feature'`)
+4. Push в branch (`git push origin feature/amazing-feature`)
+5. Откройте Pull Request
+
+### Требования к коду
+
+- Следуйте PEP 8
+- Добавляйте тесты для нового функционала
+- Обновляйте документацию при изменении API
+- Используйте type hints
 
 ---
 
 ## 📄 Лицензия
 
-MIT License
+Этот проект распространяется под лицензией MIT. См. файл [LICENSE](LICENSE) для деталей.
 
 ---
 
-<br>
+## 📞 Контакты
 
-# Lentagram AI 🤖
-
-**AI-powered Telegram Intelligence Platform**
-
-Lentagram automatically collects information from Telegram channels, analyzes message content using LLMs, classifies content, and creates personalized news feeds.
+- **Автор**: Your Name
+- **Email**: your.email@example.com
+- **Telegram**: [@yourusername](https://t.me/yourusername)
 
 ---
 
-## 🚀 Quick Start
+<div align="center">
 
-### 1. Clone the repository
-```bash
-git clone <repository-url>
-cd lentagram
-```
+**Made with ❤️ by the Lentagram Team**
 
-### 2. Install dependencies
-```bash
-pip install -r requirements.txt
-```
+[⬆️ Вернуться к началу](#lentagram-bot---telegram-news-aggregator)
 
-### 3. Configure environment variables
-Create a `.env` file in the project root:
-
-```bash
-cp .env.example .env
-```
-
-Or create manually and add the following variables:
-
-```env
-# Required parameters
-TELEGRAM_BOT_TOKEN=your_bot_token_here
-API_ID=your_api_id_here
-API_HASH=your_api_hash_here
-
-# Optional: Telethon session (if available)
-TELETHON_SESSION=
-
-# Optional: AI classifier keys
-OPENROUTER_API_KEY=
-GEMINI_API_KEY=
-GROQ_API_KEY=
-```
-
-**Where to get credentials:**
-- `TELEGRAM_BOT_TOKEN`: create a bot via [@BotFather](https://t.me/BotFather)
-- `API_ID` and `API_HASH`: get them at [my.telegram.org](https://my.telegram.org/apps)
-
-### 4. Run the bot
-```bash
-python main.py
-```
-
-On first run, the bot will request Telegram authorization (phone number and confirmation code).
-
----
-
-## ✨ Key Features
-
-### 🧠 AI Content Processing
-
-- **LLM Post Classification** — automatic content topic detection
-- **Relevance Detection** — filter posts by specified topic
-- **Auto Summary Generation** — brief content summarization
-- **Topic Categorization** — distribution by categories
-- **Personalized Recommendations** — adaptation based on user feedback
-
-### 📡 Telegram Intelligence
-
-- **Telethon Channel Monitoring** — real-time new post tracking
-- **Custom Feed Creation** — channel grouping by topics
-- **Media Content Processing** — support for photos, videos, documents, and albums
-- **Source Management** — add/remove channels
-
-### 🎯 Personalization
-
-- **Custom Interest Topics** — configure filters for each feed
-- **Feedback Loop** — likes/dislikes for model training
-- **Recommendation Adaptation** — learning user preferences
-
----
-
-## 🏗️ Architecture
-
-```
-                 Telegram API
-                     |
-                     |
-              Telethon Listener
-                     |
-                     |
-              Message Pipeline
-                     |
-        --------------------------
-        |                        |
-     AI Engine               Database
-        |
- -----------------
- |       |       |
-LLM   Summary  Embeddings
-
-
-                     |
-                     |
-               Telegram Bot
-                     |
-                   User
-```
-
----
-
-## 🛠️ Tech Stack
-
-### Backend
-
-- Python 3.11+
-- AsyncIO
-- python-telegram-bot v21.6
-- Telethon v1.36.0
-
-### AI
-
-- OpenRouter API (Llama models)
-- Google Generative AI (Gemini)
-- Groq API
-- Prompt Engineering
-- RAG architecture (planned)
-- Vector Search (planned)
-
-### Storage
-
-**Current:**
-- SQLite
-
-**Planned migration:**
-- PostgreSQL
-- Redis (cache)
-- Qdrant (vector search)
-
-### DevOps
-
-- Linux VPS
-- Docker (planned)
-- Git
-- Systemd
-
----
-
-## 📁 Project Structure
-
-```
-/workspace
-├── main.py                 # Entry point, bot setup
-├── config.py               # Environment variables
-├── requirements.txt        # Dependencies
-├── README.md              # Documentation
-├── handlers/
-│   ├── commands.py        # Command handlers (/start, /help)
-│   ├── feeds.py           # Feed management
-│   └── channels.py        # Channel management
-├── services/
-│   ├── database.py        # DB initialization, connections
-│   ├── channel_service.py # Data access layer
-│   ├── telethon_client.py # Telethon manager
-│   └── ai/
-│       ├── analyzer.py    # AI post analysis
-│       └── classifier.py  # Classification
-└── utils/
-    └── text.py            # Text processing utilities
-```
-
----
-
-## ⚙️ AI Filter Configuration
-
-AI filtering is enabled by default for new feeds. To manage:
-
-1. Select a feed in the "My Feeds" menu
-2. Click "⚙️ AI Filter" to enable/disable
-3. When creating a feed, you can specify a topic for more accurate filtering
-
----
-
-## 🔧 Troubleshooting
-
-### Error "File .env not found"
-Create a `.env` file in the project root (see "Configuration" section)
-
-### Telethon Authorization Error
-Run `get_session_string.py` to obtain session string
-
-### Posts not arriving
-- Check that the channel is added to the feed
-- Ensure AI filter is not rejecting posts
-- Check logs for errors
-
-### Media Album Issues
-If media files are split into separate messages, ensure you're using the latest code version with grouped_id support
-
----
-
-## 📄 License
-
-MIT License
+</div>
