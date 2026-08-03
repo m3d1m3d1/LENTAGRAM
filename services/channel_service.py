@@ -271,50 +271,7 @@ class ChannelService:
                 (feed_id, channel_id, message_id),
             ).fetchone()
             return row["id"] if row else None
-    def save_ai_analysis(
-        self,
-        post_id: int,
-        analysis: dict
-    ) -> None:
-        """
-        Сохраняет результат AI анализа поста.
-        """
 
-        
-
-        logger = logging.getLogger(__name__)
-        with get_connection() as conn:
-            logger.info(
-            f"Saving AI analysis for post {post_id}: {analysis}"
-            )
-            conn.execute(
-            
-                """
-                INSERT INTO post_ai_analysis
-                (
-                    post_id,
-                    category,
-                    summary,
-                    importance,
-                    importance_reason,
-                    keywords
-                )
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    post_id,
-                    analysis.get("category"),
-                    analysis.get("summary"),
-                    analysis.get("importance"),
-                    analysis.get("importance_reason"),
-                    json.dumps(
-                        analysis.get("keywords", []),
-                        ensure_ascii=False
-                    )
-                )
-            )
-
-            conn.commit()
     # ---------- каналы ----------
 
     def add_channel_to_feed(self, feed_id: int, username: str, title: Optional[str] = None,

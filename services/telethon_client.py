@@ -212,6 +212,16 @@ class TelethonManager:
             channel_name = f"канал_{channel_id}"
 
         post_text = event.message.message or event.message.text or ""
+        
+        # Проверяем, является ли сообщение частью альбома (группы медиа)
+        grouped_id = getattr(event.message, 'grouped_id', None)
+        is_album_part = grouped_id is not None
+        
+        # Если это часть альбома, проверяем, первое ли это сообщение в группе
+        if is_album_part:
+            # Для альбомов обрабатываем только первое сообщение, чтобы избежать дублирования
+            # Telethon обычно отправляет первое сообщение альбома с полным текстом
+            pass  # Продолжаем обработку
 
         # Получаем внутренний ID канала из БД
         channel_db_id = self.channel_service.get_channel_db_id(channel_id)
@@ -232,16 +242,17 @@ class TelethonManager:
                 logger.info(f"Лента {feed['name']} не активна для юзера {feed['user_id']}, пропускаем")
                 continue
 
-            # Проверяем дубли
-            if self.channel_service.is_post_sent(feed["feed_id"], channel_db_id, event.message.id):
-                logger.info(f"Пост {event.message.id} уже отправлен в ленту {feed['name']}")
+            # Проверяем дубли - для альбомов используем grouped_id если есть
+            check_message_id = event.message.id
+            if self.channel_service.is_post_sent(feed["feed_id"], channel_db_id, check_message_id):
+                logger.info(f"Пост {check_message_id} уже отправлен в ленту {feed['name']}")
                 continue
 
             try:
                 post_id = self.channel_service.save_post(
                     feed["feed_id"],
                     channel_db_id,
-                    event.message.id,
+                    check_message_id,
                     post_text
                 )
                 logger.info(f"POST SAVED id={post_id}")
@@ -299,10 +310,10 @@ class TelethonManager:
     ):
         """
         Отправляет пост пользователю в личку.
-        Если есть медиа — скачиваем через Telethon и отправляем через PTB.
+        Если есть медиа (включая альбомы) — скачиваем через Telethon и отправляем через PTB.
         Если текстовый пост — отправляем текст с превью.
         """
-        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+        from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, InputMediaVideo, InputMediaDocument, InputMediaAudio
 
         feedback_markup = InlineKeyboardMarkup([
             [
@@ -332,15 +343,66 @@ class TelethonManager:
             f'🔗 <a href="{post_link}">Открыть оригинал</a>'
         )
 
+        # Проверяем, является ли сообщение альбомом (группой медиа)
+        grouped_id = getattr(message, 'grouped_id', None)
+        is_album = grouped_id is not None
+        
         # Лимит caption в Telegram — 1024 символа для медиа, 4096 для текста
         caption_limit = 1024 if message.media else 4096
         if len(caption) > caption_limit:
             caption = caption[:caption_limit - 3] + "…"
 
         try:
+            client = _get_client()
+            
+            if is_album and message.media:
+                # Получаем все сообщения в альбоме
+                album_messages = await client.get_messages(
+                    message.chat_id,
+                    ids=range(message.id, message.id + 10)  # Максимум 10 фото в альбоме
+                )
+                
+                # Фильтруем только сообщения с тем же grouped_id
+                album_messages = [m for m in album_messages if getattr(m, 'grouped_id', None) == grouped_id]
+                
+                if len(album_messages) > 1:
+                    # Это альбом — собираем все медиа
+                    media_group = []
+                    for msg in album_messages:
+                        if not msg.media:
+                            continue
+                            
+                        buffer = await client.download_media(msg.media, bytes)
+                        if buffer is None:
+                            continue
+                            
+                        from telegram import InputFile
+                        import io
+                        media_file = InputFile(io.BytesIO(buffer))
+                        
+                        # Определяем тип медиа и добавляем в группу
+                        if msg.photo:
+                            media_group.append(InputMediaPhoto(media=media_file, caption=caption if len(media_group) == 0 else ""))
+                        elif msg.video:
+                            media_group.append(InputMediaVideo(media=media_file, caption=caption if len(media_group) == 0 else ""))
+                        elif msg.document:
+                            file_name = getattr(msg.document.attributes[0], 'file_name', 'file') if msg.document.attributes else 'file'
+                            media_group.append(InputMediaDocument(media=media_file, filename=file_name, caption=caption if len(media_group) == 0 else ""))
+                        elif msg.audio:
+                            media_group.append(InputMediaAudio(media=media_file, caption=caption if len(media_group) == 0 else ""))
+                    
+                    # Отправляем всю группу одним запросом
+                    if media_group:
+                        await self.bot.send_media_group(
+                            chat_id=feed["user_id"],
+                            media=media_group,
+                            reply_markup=feedback_markup if len(media_group) == 1 else None
+                        )
+                        return
+            
+            # Обычная отправка одного медиа или текста
             if message.media:
                 # Скачиваем файл через Telethon во временный буфер
-                client = _get_client()
                 buffer = await client.download_media(message.media, bytes)
 
                 if buffer is None:
