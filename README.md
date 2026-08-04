@@ -370,9 +370,9 @@ cp .env.example .env
 
 ## 📞 Контакты
 
-- **Автор**: Your Name
-- **Email**: your.email@example.com
-- **Telegram**: [@yourusername](https://t.me/yourusername)
+- **Автор**: Alexander Boiko
+- **Email**: lilmedibleedem@proton.me
+- **Telegram**: [@Koolmedivh]
 
 ---
 
@@ -382,4 +382,4 @@ cp .env.example .env
 
 [⬆️ Вернуться к началу](#lentagram-bot---telegram-news-aggregator)
 
-</div>
+</div>:
