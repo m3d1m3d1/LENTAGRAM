@@ -1,6 +1,6 @@
 # Lentagram Bot - Telegram News Aggregator
 
-[![CI/CD](https://github.com/yourusername/lentagram-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/yourusername/lentagram-bot/actions)
+[![CI/CD](https://github.com/m3d1m3d1/LENTAGRAM/actions/workflows/ci.yml/badge.svg)](https://github.com/m3d1m3d1/LENTAGRAM/actions)
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -52,7 +52,7 @@
 ### 1. Клонирование репозитория
 
 ```bash
-git clone https://github.com/yourusername/lentagram-bot.git
+git clone https://github.com/m3d1m3d1/LENTAGRAM.git
 cd lentagram-bot
 ```
 
@@ -378,7 +378,7 @@ cp .env.example .env
 
 <div align="center">
 
-**Made with ❤️ by the Lentagram Team**
+**Made with ❤️ by Alexander Boiko**
 
 [⬆️ Вернуться к началу](#lentagram-bot---telegram-news-aggregator)
 
