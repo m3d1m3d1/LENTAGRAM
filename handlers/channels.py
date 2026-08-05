@@ -83,15 +83,13 @@ async def process_channel_input(update: Update, context: ContextTypes.DEFAULT_TY
     logger.info("Checking forward...")
     forward_chat = None
     
-    # PTB v20: используем forward_from_chat вместо forward_origin
-    if update.message.forward_from_chat:
-        forward_chat = update.message.forward_from_chat
-    # Для совместимости с более новыми версиями
-    elif hasattr(update.message, 'forward_origin') and update.message.forward_origin:
+    # PTB v20+: используем forward_origin вместо устаревшего forward_from_chat
+    if hasattr(update.message, 'forward_origin') and update.message.forward_origin:
         origin = update.message.forward_origin
+        # MessageOriginChannel имеет поле chat, MessageOriginChat тоже имеет chat
         if hasattr(origin, 'chat'):
             forward_chat = origin.chat
-
+    
     if forward_chat:
         logger.info(f"Forward chat found: {forward_chat.type}")
         if forward_chat.type == "channel":
@@ -101,9 +99,17 @@ async def process_channel_input(update: Update, context: ContextTypes.DEFAULT_TY
             else:
                 await update.message.reply_text(_t(update.effective_user.id, "forward_channel_only"))
                 return GET_CHANNEL_INPUT
-    else:
+        else:
+            # Переслано не из канала (например, из чата или от пользователя)
+            await update.message.reply_text(_t(update.effective_user.id, "forward_channel_only"))
+            return GET_CHANNEL_INPUT
+    elif update.message.text:
         channel_input = update.message.text.strip()
         logger.info(f"Text input: {channel_input}")
+    else:
+        # Нет ни пересланного сообщения, ни текста
+        await update.message.reply_text(_t(update.effective_user.id, "nothing_recognized"))
+        return GET_CHANNEL_INPUT
 
     # ===== ВАРИАНТ 2: Обычный текст =====
     logger.info("Parsing input...")
