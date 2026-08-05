@@ -5,10 +5,17 @@ from telegram.constants import ParseMode
 from telegram.ext import ContextTypes, ConversationHandler
 from services.ai.filter_generator import FilterGenerator
 from services.channel_service import ChannelService
+from services.i18n import get as tr
 
 logger = logging.getLogger(__name__)
 channel_service = ChannelService()
 filter_generator = FilterGenerator()
+
+def _lang(user_id: int) -> str:
+    return channel_service.get_user_language(user_id)
+
+def _t(user_id: int, key: str, **kwargs) -> str:
+    return tr(_lang(user_id), key, **kwargs)
 GET_FEED_NAME, GET_FEED_FILTER = range(2)
 GET_EDITED_FILTER = 20
 
@@ -16,12 +23,8 @@ GET_EDITED_FILTER = 20
 
 async def create_feed_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Точка входа: спрашиваем название ленты."""
-    text = (
-        "✨ <b>Создание ленты</b>\n\n"
-        "Придумай название. Например: «Новости IT», «Крипта», «Мемы дня».\n\n"
-        "📝 Отправь название одним сообщением:"
-    )
-    markup = InlineKeyboardMarkup([[InlineKeyboardButton("❌ Отмена", callback_data="cancel_feed_creation")]])
+    text = _t(update.effective_user.id, "create_feed_prompt")
+    markup = InlineKeyboardMarkup([[InlineKeyboardButton(_t(update.effective_user.id, "button_cancel"), callback_data="cancel_feed_creation")]])
 
     if update.callback_query:
         await update.callback_query.answer()
@@ -36,13 +39,13 @@ async def get_feed_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     print(f">>> get_feed_name called! text='{update.message.text if update.message else 'NO MESSAGE'}'")
     feed_name = update.message.text.strip()
     if not feed_name:
-        await update.message.reply_text("❌ Название не может быть пустым. Попробуй ещё раз.")
+        await update.message.reply_text(_t(update.effective_user.id, "feed_name_empty"))
         return GET_FEED_NAME
 
     context.user_data["new_feed_name"] = feed_name
 
     waiting_message = await update.message.reply_text(
-        f"🤖 Подбираю варианты фильтра для «{feed_name}»…"
+        _t(update.effective_user.id, "generating_filters", feed_name=feed_name)
     )
 
     # --- защита от зависания ИИ ---
@@ -133,13 +136,13 @@ async def get_feed_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
                 callback_data="choose_filter_2"
             ),
             InlineKeyboardButton(
-                "✍️ Свой",
+                _t(update.effective_user.id, "button_custom_filter"),
                 callback_data="choose_filter_custom"
             )
         ],
         [
             InlineKeyboardButton(
-                "❌ Отмена",
+                _t(update.effective_user.id, "button_cancel"),
                 callback_data="cancel_feed_creation"
             )
         ]
@@ -168,7 +171,7 @@ async def choose_filter(update: Update, context: ContextTypes.DEFAULT_TYPE)-> in
         context.user_data["waiting_custom_filter"] = True
 
         await query.edit_message_text(
-            "✍️ Напиши свой фильтр для ленты:"
+            _t(update.effective_user.id, "custom_filter_prompt")
         )
 
         return GET_FEED_FILTER
@@ -211,7 +214,7 @@ async def get_feed_filter(
 
     if not filter_prompt:
         await update.message.reply_text(
-            "❌ Фильтр не может быть пустым"
+            _t(update.effective_user.id, "filter_empty")
         )
         return GET_FEED_FILTER
 
@@ -228,22 +231,22 @@ async def _finish_feed_creation(update: Update, context: ContextTypes.DEFAULT_TY
 
     if not feed_name:
         markup = InlineKeyboardMarkup([
-            [InlineKeyboardButton("➕ Создать ленту", callback_data="create_feed")],
-            [InlineKeyboardButton("🏠 В главное меню", callback_data="back_to_main")],
+            [InlineKeyboardButton(_t(user_id, "button_create_feed"), callback_data="create_feed")],
+            [InlineKeyboardButton(_t(user_id, "button_back_main"), callback_data="back_to_main")],
         ])
-        await _reply(update, "⚠️ Что-то пошло не так, начни создание ленты заново.", markup)
+        await _reply(update, _t(user_id, "feed_creation_lost"), markup)
         return ConversationHandler.END
 
     feed_id = channel_service.create_feed(user_id, feed_name, filter_prompt)
 
     text = (
-            f"✅ Лента «{feed_name}» создана"
-            + (f" с темой «{filter_prompt}»." if filter_prompt else " без фильтрации по теме.")
+            _t(user_id, "feed_created", feed_name=feed_name)
+            + (_t(user_id, "feed_created_with_filter", filter_prompt=filter_prompt) if filter_prompt else _t(user_id, "feed_created_without_filter"))
     )
     markup = InlineKeyboardMarkup([
-        [InlineKeyboardButton("➕ Добавить канал", callback_data=f"add_channel_{feed_id}")],
-        [InlineKeyboardButton("📂 Мои ленты", callback_data="list_feeds")],
-        [InlineKeyboardButton("🏠 В главное меню", callback_data="back_to_main")],
+        [InlineKeyboardButton(_t(user_id, "button_add_channel"), callback_data=f"add_channel_{feed_id}")],
+        [InlineKeyboardButton(_t(user_id, "button_my_feeds"), callback_data="list_feeds")],
+        [InlineKeyboardButton(_t(user_id, "button_back_main"), callback_data="back_to_main")],
     ])
     await _reply(update, text, markup)
     return ConversationHandler.END
@@ -254,8 +257,8 @@ async def cancel_feed_creation(update: Update, context: ContextTypes.DEFAULT_TYP
     query = update.callback_query
     await query.answer()
     await query.edit_message_text(
-        "❌ Создание ленты отменено",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 В главное меню", callback_data="back_to_main")]]),
+        _t(update.effective_user.id, "feed_creation_cancelled"),
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(_t(user_id, "button_back_main"), callback_data="back_to_main")]]),
     )
     return ConversationHandler.END
 
@@ -268,35 +271,35 @@ async def list_feeds(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         feeds = channel_service.get_user_feeds(user_id)
 
         if not feeds:
-            text = "📭 У тебя пока нет созданных лент"
-            markup = InlineKeyboardMarkup([[InlineKeyboardButton("➕ Создать ленту", callback_data="create_feed")]])
+            text = _t(user_id, "no_feeds")
+            markup = InlineKeyboardMarkup([[InlineKeyboardButton(_t(user_id, "button_create_feed"), callback_data="create_feed")]])
             await _reply(update, text, markup)
             return
 
         lines = []
         for feed in feeds:
-            topic_part = f" · тема: {feed['topic']}" if feed["topic"] else ""
+            topic_part = _t(user_id, "feed_topic_part", topic=feed["topic"]) if feed["topic"] else ""
             filter_status = "🤖" if feed.get("ai_filter_enabled", True) else "🚫"
             lines.append(f"• <b>{feed['name']}</b> {filter_status} ({len(feed['channels'])} кан.){topic_part}")
-        text = "📋 <b>Твои ленты:</b>\n\n" + "\n".join(lines)
+        text = _t(user_id, "feeds_title") + "\n".join(lines)
 
         keyboard = []
         for feed in feeds:
-            filter_btn_text = "🤖 ИИ вкл" if feed.get("ai_filter_enabled", True) else "🚫 ИИ выкл"
+            filter_btn_text = _t(user_id, "ai_on") if feed.get("ai_filter_enabled", True) else _t(user_id, "ai_off")
             keyboard.append([
                 InlineKeyboardButton(f"📡 {feed['name']}", callback_data=f"channels_{feed['id']}"),
                 InlineKeyboardButton(filter_btn_text, callback_data=f"toggle_ai_{feed['id']}"),
                 InlineKeyboardButton("🗑", callback_data=f"delete_feed_{feed['id']}"),
             ])
-        keyboard.append([InlineKeyboardButton("➕ Создать новую ленту", callback_data="create_feed")])
-        keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")])
+        keyboard.append([InlineKeyboardButton(_t(user_id, "button_create_new_feed"), callback_data="create_feed")])
+        keyboard.append([InlineKeyboardButton(_t(user_id, "button_back"), callback_data="back_to_main")])
 
         await _reply(update, text, InlineKeyboardMarkup(keyboard))
 
     except Exception as e:
         logger.error(f"Ошибка в list_feeds: {e}", exc_info=True)
-        markup = InlineKeyboardMarkup([[InlineKeyboardButton("🏠 В главное меню", callback_data="back_to_main")]])
-        await _reply(update, "⚠️ Не удалось загрузить ленты. Попробуй ещё раз чуть позже.", markup)
+        markup = InlineKeyboardMarkup([[InlineKeyboardButton(_t(user_id, "button_back_main"), callback_data="back_to_main")]])
+        await _reply(update, _t(update.effective_user.id, "feeds_load_error"), markup)
 
 
 async def delete_feed(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -317,9 +320,9 @@ async def toggle_ai_filter(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     user_id = update.effective_user.id
 
     new_state = channel_service.toggle_ai_filter(user_id, feed_id)
-    status = "включён" if new_state else "выключён"
+    status = _t(user_id, "ai_filter_enabled") if new_state else _t(user_id, "ai_filter_disabled")
 
-    await query.answer(f"ИИ-фильтр {status}")
+    await query.answer(_t(user_id, "ai_filter_status", status=status))
     await list_feeds(update, context)
 
 
@@ -346,27 +349,21 @@ async def edit_filter_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE)
     feed = channel_service.get_feed(user_id, feed_id)
     if not feed:
         await query.edit_message_text(
-            "⚠️ Лента не найдена — возможно, она уже удалена.",
+            _t(user_id, "feed_not_found_deleted"),
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("📂 Мои ленты", callback_data="list_feeds")]
+                [InlineKeyboardButton(_t(user_id, "button_my_feeds"), callback_data="list_feeds")]
             ])
         )
         return ConversationHandler.END
 
     context.user_data["editing_feed_id"] = feed_id
 
-    current_filter = feed.get("topic") or "(фильтр не задан — показываются все посты)"
+    current_filter = feed.get("topic") or _t(user_id, "filter_not_set")
     safe_filter = _escape_html(current_filter)
 
-    text = (
-        f"✏️ <b>Редактирование фильтра «{feed['name']}»</b>\n\n"
-        "Текущий фильтр (нажми, чтобы скопировать):\n\n"
-        f"<code>{safe_filter}</code>\n\n"
-        "Пришли новый текст фильтра одним сообщением — он полностью заменит текущий.\n"
-        "Можно скопировать текст выше и поправить пару слов."
-    )
+    text = _t(user_id, "edit_filter_prompt", feed_name=feed["name"], filter_text=safe_filter)
     markup = InlineKeyboardMarkup([
-        [InlineKeyboardButton("❌ Отмена", callback_data="cancel_edit_filter")]
+        [InlineKeyboardButton(_t(update.effective_user.id, "button_cancel"), callback_data="cancel_edit_filter")]
     ])
 
     await query.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=markup)
@@ -377,15 +374,15 @@ async def save_edited_filter(update: Update, context: ContextTypes.DEFAULT_TYPE)
     """Сохраняет новый текст фильтра, присланный пользователем."""
     new_filter = update.message.text.strip()
     if not new_filter:
-        await update.message.reply_text("❌ Фильтр не может быть пустым. Попробуй ещё раз.")
+        await update.message.reply_text(_t(update.effective_user.id, "filter_empty_retry"))
         return GET_EDITED_FILTER
 
     feed_id = context.user_data.pop("editing_feed_id", None)
     if not feed_id:
         await update.message.reply_text(
-            "⚠️ Потерялась информация о ленте, начни заново из «Мои ленты».",
+            _t(update.effective_user.id, "feed_context_lost"),
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("📂 Мои ленты", callback_data="list_feeds")]
+                [InlineKeyboardButton(_t(user_id, "button_my_feeds"), callback_data="list_feeds")]
             ])
         )
         return ConversationHandler.END
@@ -395,22 +392,22 @@ async def save_edited_filter(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     if not ok:
         await update.message.reply_text(
-            "⚠️ Не удалось сохранить фильтр — лента не найдена, возможно, она уже удалена.",
+            _t(user_id, "filter_save_failed"),
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("📂 Мои ленты", callback_data="list_feeds")]
+                [InlineKeyboardButton(_t(user_id, "button_my_feeds"), callback_data="list_feeds")]
             ])
         )
         return ConversationHandler.END
 
     feed = channel_service.get_feed(user_id, feed_id)
-    feed_name = feed["name"] if feed else "лента"
+    feed_name = feed["name"] if feed else "feed"
 
     markup = InlineKeyboardMarkup([
-        [InlineKeyboardButton("📡 К каналам ленты", callback_data=f"channels_{feed_id}")],
-        [InlineKeyboardButton("📂 Мои ленты", callback_data="list_feeds")],
+        [InlineKeyboardButton(_t(user_id, "button_to_feed_channels"), callback_data=f"channels_{feed_id}")],
+        [InlineKeyboardButton(_t(user_id, "button_my_feeds"), callback_data="list_feeds")],
     ])
     await update.message.reply_text(
-        f"✅ Фильтр ленты «{feed_name}» обновлён.",
+        _t(user_id, "filter_updated", feed_name=feed_name),
         reply_markup=markup,
     )
     return ConversationHandler.END
@@ -421,8 +418,8 @@ async def cancel_edit_filter(update: Update, context: ContextTypes.DEFAULT_TYPE)
     query = update.callback_query
     await query.answer()
     await query.edit_message_text(
-        "❌ Редактирование отменено",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 В главное меню", callback_data="back_to_main")]]),
+        _t(update.effective_user.id, "edit_cancelled"),
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(_t(user_id, "button_back_main"), callback_data="back_to_main")]]),
     )
     return ConversationHandler.END
 

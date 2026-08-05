@@ -65,6 +65,7 @@ def init_db() -> None:
             user_id INTEGER PRIMARY KEY,
             active_feed_id INTEGER DEFAULT NULL,
             show_all_feeds INTEGER DEFAULT 1,
+            language_code TEXT NOT NULL DEFAULT 'ru',
             FOREIGN KEY (active_feed_id) REFERENCES feeds(id) ON DELETE SET NULL
         )
     """)
@@ -139,6 +140,11 @@ def init_db() -> None:
 
     try:
         cursor.execute("ALTER TABLE feeds ADD COLUMN temporarily_disabled_by_system INTEGER DEFAULT 0")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+    try:
+        cursor.execute("ALTER TABLE user_settings ADD COLUMN language_code TEXT NOT NULL DEFAULT 'ru'")
         conn.commit()
     except sqlite3.OperationalError:
         pass

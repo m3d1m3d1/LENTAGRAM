@@ -5,10 +5,14 @@ from telegram.constants import ParseMode
 from telegram.ext import ContextTypes, ConversationHandler
 from services.database import get_connection
 from services.channel_service import ChannelService
+from services.i18n import get as tr
 from services.telethon_client import _get_client  # <-- ДОБАВЬ ЭТО
 from utils.text import extract_username
 logger = logging.getLogger(__name__)
 channel_service = ChannelService()
+
+def _t(user_id: int, key: str, **kwargs) -> str:
+    return tr(channel_service.get_user_language(user_id), key, **kwargs)
 
 SEARCH_CHANNELS, GET_CHANNEL_INPUT = range(10, 12)  # Новое состояние
 
@@ -23,9 +27,9 @@ async def add_channel_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE)
     feed = channel_service.get_feed(user_id, feed_id)
     if not feed:
         await query.edit_message_text(
-            "⚠️ Лента не найдена — возможно, она уже удалена.",
+            _t(update.effective_user.id, "feed_not_found_deleted"),
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("📂 Мои ленты", callback_data="list_feeds")]
+                [InlineKeyboardButton(_t(update.effective_user.id, "button_my_feeds"), callback_data="list_feeds")]
             ])
         )
         return ConversationHandler.END
@@ -33,14 +37,11 @@ async def add_channel_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE)
     context.user_data["target_feed_id"] = feed_id
     context.user_data["pending_channels"] = []
 
-    text = (
-        f"📥 Добавляем каналы в ленту «{feed['name']}»\n\n"
-        "Выбери способ:"
-    )
+    text = _t(user_id, "add_channels_choose", feed_name=feed["name"])
     markup = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔍 Поиск по названию", callback_data=f"search_channels_{feed_id}")],
-        [InlineKeyboardButton("✏️ Ввести @username / ссылку", callback_data=f"manual_add_{feed_id}")],
-        [InlineKeyboardButton("❌ Отмена", callback_data="cancel_add_channel")]
+        [InlineKeyboardButton(_t(update.effective_user.id, "button_search_by_name"), callback_data=f"search_channels_{feed_id}")],
+        [InlineKeyboardButton(_t(update.effective_user.id, "button_manual_add"), callback_data=f"manual_add_{feed_id}")],
+        [InlineKeyboardButton(_t(update.effective_user.id, "button_cancel"), callback_data="cancel_add_channel")]
     ])
     await query.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=markup)
     return ConversationHandler.END  # Здесь заканчиваем, дальше новый entry_point
@@ -54,15 +55,10 @@ async def manual_add_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     feed_id = int(query.data.split("_")[-1])
     context.user_data["target_feed_id"] = feed_id
 
-    text = (
-        "📥 Добавляем каналы вручную\n\n"
-        "Присылай @username, ссылки (t.me/xxx), или перешли пост из канала.\n"
-        "Можно несколько через запятую.\n\n"
-        "Когда закончишь — нажми «✅ Закончить»"
-    )
+    text = _t(update.effective_user.id, "manual_add_prompt")
     markup = InlineKeyboardMarkup([
-        [InlineKeyboardButton("✅ Закончить", callback_data="finish_adding")],
-#        [InlineKeyboardButton("❌ Отмена", callback_data="cancel_add_channel")]
+        [InlineKeyboardButton(_t(update.effective_user.id, "button_finish"), callback_data="finish_adding")],
+#        [InlineKeyboardButton(_t(update.effective_user.id, "button_cancel"), callback_data="cancel_add_channel")]
     ])
     await query.edit_message_text(text, reply_markup=markup)
     return GET_CHANNEL_INPUT
@@ -75,9 +71,9 @@ async def process_channel_input(update: Update, context: ContextTypes.DEFAULT_TY
     feed_id = context.user_data.get("target_feed_id")
     if not feed_id:
         await update.message.reply_text(
-            "⚠️ Потерялась информация о ленте, начни заново из «Мои ленты».",
+            _t(update.effective_user.id, "feed_context_lost"),
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("📂 Мои ленты", callback_data="list_feeds")]
+                [InlineKeyboardButton(_t(update.effective_user.id, "button_my_feeds"), callback_data="list_feeds")]
             ])
         )
         return ConversationHandler.END
@@ -103,7 +99,7 @@ async def process_channel_input(update: Update, context: ContextTypes.DEFAULT_TY
             if username:
                 channel_input = f"@{username}"
             else:
-                await update.message.reply_text("⚠️ Пересылай пост из канала, не из чата.")
+                await update.message.reply_text(_t(update.effective_user.id, "forward_channel_only"))
                 return GET_CHANNEL_INPUT
     else:
         channel_input = update.message.text.strip()
@@ -122,7 +118,7 @@ async def process_channel_input(update: Update, context: ContextTypes.DEFAULT_TY
     logger.info(f"Parsed inputs: {raw_inputs}")
 
     if not raw_inputs:
-        await update.message.reply_text("❌ Ничего не распознал...")
+        await update.message.reply_text(_t(update.effective_user.id, "nothing_recognized"))
         return GET_CHANNEL_INPUT
 
     added = []
@@ -163,17 +159,17 @@ async def process_channel_input(update: Update, context: ContextTypes.DEFAULT_TY
 
     response_lines = []
     if added:
-        response_lines.append(f"✅ Добавлено {len(added)}:")
+        response_lines.append(_t(update.effective_user.id, "added_count", count=len(added)))
         response_lines.extend([f"• {a}" for a in added])
     if failed:
-        response_lines.append(f"\n❌ Не удалось ({len(failed)}):")
+        response_lines.append(_t(update.effective_user.id, "failed_count", count=len(failed)))
         response_lines.extend([f"• {f}" for f in failed])
 
-    response_text = "\n".join(response_lines) if response_lines else "⚠️ Ничего не добавлено"
+    response_text = "\n".join(response_lines) if response_lines else _t(update.effective_user.id, "nothing_added")
 
     markup = InlineKeyboardMarkup([
-        [InlineKeyboardButton("➕ Добавить ещё", callback_data="add_more_channels")],
-        [InlineKeyboardButton("✅ Закончить", callback_data="finish_adding")],
+        [InlineKeyboardButton(_t(update.effective_user.id, "button_add_more"), callback_data="add_more_channels")],
+        [InlineKeyboardButton(_t(update.effective_user.id, "button_finish"), callback_data="finish_adding")],
     ])
 
     await update.message.reply_text(response_text, reply_markup=markup)
@@ -191,15 +187,15 @@ async def finish_adding(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
     if not pending:
         await query.edit_message_text(
-            "⚠️ Не выбрано ни одного канала",
+            _t(update.effective_user.id, "no_channels_selected"),
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🏠 В главное меню", callback_data="back_to_main")]
+                [InlineKeyboardButton(_t(update.effective_user.id, "button_back_main"), callback_data="back_to_main")]
             ])
         )
         return ConversationHandler.END
 
     feed = channel_service.get_feed(update.effective_user.id, feed_id)
-    feed_name = feed["name"] if feed else "ленту"
+    feed_name = feed["name"] if feed else "feed"
 
     # pending — список username'ов (строк)
     added_lines = [f"• @{u}" for u in pending]
@@ -209,15 +205,11 @@ async def finish_adding(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     if telethon_manager and telethon_manager.is_started:
         await telethon_manager.refresh_handlers()
 
-    text = (
-            f"✅ Готово! Добавлено {len(pending)} каналов в ленту «{feed_name}»:\n\n"
-            + "\n".join(added_lines)
-            + "\n\nНовые посты будут приходить автоматически."
-    )
+    text = _t(update.effective_user.id, "channels_added_done", count=len(pending), feed_name=feed_name, channels="\n".join(added_lines))
     markup = InlineKeyboardMarkup([
-        [InlineKeyboardButton("➕ Добавить ещё каналы", callback_data=f"add_channel_{feed_id}")],
-        [InlineKeyboardButton("📂 Мои ленты", callback_data="list_feeds")],
-        [InlineKeyboardButton("🏠 В главное меню", callback_data="back_to_main")],
+        [InlineKeyboardButton(_t(update.effective_user.id, "button_add_more_channels"), callback_data=f"add_channel_{feed_id}")],
+        [InlineKeyboardButton(_t(update.effective_user.id, "button_my_feeds"), callback_data="list_feeds")],
+        [InlineKeyboardButton(_t(update.effective_user.id, "button_back_main"), callback_data="back_to_main")],
     ])
 
     await query.edit_message_text(text, reply_markup=markup)
@@ -230,8 +222,8 @@ async def cancel_add_channel(update: Update, context: ContextTypes.DEFAULT_TYPE)
     query = update.callback_query
     await query.answer()
     await query.edit_message_text(
-        "❌ Добавление каналов отменено",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 В главное меню", callback_data="back_to_main")]]),
+        _t(update.effective_user.id, "add_channels_cancelled"),
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(_t(update.effective_user.id, "button_back_main"), callback_data="back_to_main")]]),
     )
     return ConversationHandler.END
 
@@ -248,13 +240,9 @@ async def _render_feed_channels(update: Update, user_id: int, feed_id: int) -> N
     channels = feed["channels"]
 
     if not channels:
-        text = (
-            f"📡 <b>Каналы ленты «{feed['name']}»</b>\n\n"
-            "📭 Пока нет добавленных каналов.\n"
-            "Добавь первый, чтобы начать получать посты."
-        )
+        text = _t(user_id, "feed_channels_empty", feed_name=feed["name"])
     else:
-        lines = [f"📡 <b>Каналы ленты «{feed['name']}»</b> ({len(channels)})\n"]
+        lines = [_t(user_id, "feed_channels_title", feed_name=feed["name"], count=len(channels))]
         lines.extend(
             f"• <b>{c['title'] or c['username']}</b> (@{c['username']})"
             for c in channels
@@ -262,12 +250,12 @@ async def _render_feed_channels(update: Update, user_id: int, feed_id: int) -> N
         text = "\n".join(lines)
 
     keyboard = [
-        [InlineKeyboardButton(f"❌ Убрать @{c['username']}", callback_data=f"removechan_{feed_id}_{c['username']}")]
+        [InlineKeyboardButton(_t(user_id, "button_remove_channel", username=c["username"]), callback_data=f"removechan_{feed_id}_{c['username']}")]
         for c in channels
     ]
-    keyboard.append([InlineKeyboardButton("➕ Добавить каналы", callback_data=f"add_channel_{feed_id}")])
-    keyboard.append([InlineKeyboardButton("✏️ Редактировать фильтр", callback_data=f"edit_filter_{feed_id}")])
-    keyboard.append([InlineKeyboardButton("🔙 К лентам", callback_data="list_feeds")])
+    keyboard.append([InlineKeyboardButton(_t(update.effective_user.id, "button_add_channels"), callback_data=f"add_channel_{feed_id}")])
+    keyboard.append([InlineKeyboardButton(_t(update.effective_user.id, "button_edit_filter"), callback_data=f"edit_filter_{feed_id}")])
+    keyboard.append([InlineKeyboardButton(_t(update.effective_user.id, "button_to_feeds"), callback_data="list_feeds")])
 
     await query.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup(keyboard))
 
@@ -298,17 +286,12 @@ async def add_more_channels(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     feed_id = context.user_data.get("target_feed_id")
     feed = channel_service.get_feed(update.effective_user.id, feed_id)
-    feed_name = feed["name"] if feed else "ленту"
+    feed_name = feed["name"] if feed else "feed"
 
-    text = (
-        f"📥 Добавляем ещё каналы в «{feed_name}».\n\n"
-        "Присылай @username, ссылки (t.me/xxx), или перешли пост из канала.\n"
-        "Можно несколько через запятую.\n\n"
-        "Когда закончишь — нажми «✅ Закончить»"
-    )
+    text = _t(update.effective_user.id, "add_more_channels_prompt", feed_name=feed_name)
     markup = InlineKeyboardMarkup([
-        [InlineKeyboardButton("✅ Закончить", callback_data="finish_adding")],
-#        [InlineKeyboardButton("❌ Отмена", callback_data="cancel_add_channel")]
+        [InlineKeyboardButton(_t(update.effective_user.id, "button_finish"), callback_data="finish_adding")],
+#        [InlineKeyboardButton(_t(update.effective_user.id, "button_cancel"), callback_data="cancel_add_channel")]
     ])
 
     await query.edit_message_text(text, reply_markup=markup)
@@ -326,17 +309,9 @@ async def search_channels_prompt(update: Update, context: ContextTypes.DEFAULT_T
     feed_id = int(query.data.split("_")[-1])
     context.user_data["target_feed_id"] = feed_id
 
-    text = (
-        "🔍 <b>Поиск каналов</b>\n\n"
-        "Введи ключевое слово или фразу — я поищу каналы в Telegram.\n\n"
-        "Примеры:\n"
-        "• новости севастополя\n"
-        "• криптовалюта\n"
-        "• юмор\n\n"
-        "⚠️ Поиск идёт через Telegram, результаты могут быть ограничены."
-    )
+    text = _t(update.effective_user.id, "search_channels_prompt")
     markup = InlineKeyboardMarkup([
-        [InlineKeyboardButton("❌ Отмена", callback_data="cancel_add_channel")]
+        [InlineKeyboardButton(_t(update.effective_user.id, "button_cancel"), callback_data="cancel_add_channel")]
     ])
     await query.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=markup)
     return SEARCH_CHANNELS
@@ -349,14 +324,14 @@ async def process_search_results(update: Update, context: ContextTypes.DEFAULT_T
 
     if not feed_id:
         await update.message.reply_text(
-            "⚠️ Потерялась информация о ленте, начни заново из «Мои ленты».",
+            _t(update.effective_user.id, "feed_context_lost"),
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("📂 Мои ленты", callback_data="list_feeds")]
+                [InlineKeyboardButton(_t(update.effective_user.id, "button_my_feeds"), callback_data="list_feeds")]
             ])
         )
         return ConversationHandler.END
 
-    await update.message.reply_text(f"🔍 Ищу каналы по запросу «{search_query}»...")
+    await update.message.reply_text(_t(update.effective_user.id, "searching_channels", query=search_query))
 
     # Поиск через Telethon
     telethon_manager = context.bot_data["telethon_manager"]
@@ -391,21 +366,17 @@ async def process_search_results(update: Update, context: ContextTypes.DEFAULT_T
 
     if not results:
         await update.message.reply_text(
-            "😕 Ничего не найдено.\n\n"
-            "Попробуй:\n"
-            "• Другие ключевые слова\n"
-            "• Более общий запрос\n"
-            "• Или добавь канал напрямую по @username",
+            _t(update.effective_user.id, "search_not_found"),
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔍 Искать снова", callback_data=f"search_channels_{feed_id}")],
-                [InlineKeyboardButton("➕ Добавить по @username", callback_data=f"add_channel_{feed_id}")],
-                [InlineKeyboardButton("❌ Отмена", callback_data="cancel_add_channel")]
+                [InlineKeyboardButton(_t(update.effective_user.id, "button_search_again"), callback_data=f"search_channels_{feed_id}")],
+                [InlineKeyboardButton(_t(update.effective_user.id, "button_add_by_username"), callback_data=f"add_channel_{feed_id}")],
+                [InlineKeyboardButton(_t(update.effective_user.id, "button_cancel"), callback_data="cancel_add_channel")]
             ])
         )
         return SEARCH_CHANNELS
 
     # Показываем результаты
-    lines = [f"🔍 Найдено {len(results)} каналов:\n"]
+    lines = [_t(update.effective_user.id, "search_found", count=len(results))]
     keyboard = []
 
     for i, ch in enumerate(results, 1):
@@ -415,8 +386,8 @@ async def process_search_results(update: Update, context: ContextTypes.DEFAULT_T
             callback_data=f"add_found_channel_{feed_id}_{ch['username']}"
         )])
 
-    keyboard.append([InlineKeyboardButton("🔍 Новый поиск", callback_data=f"search_channels_{feed_id}")])
-    keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data="cancel_add_channel")])
+    keyboard.append([InlineKeyboardButton(_t(update.effective_user.id, "button_new_search"), callback_data=f"search_channels_{feed_id}")])
+    keyboard.append([InlineKeyboardButton(_t(update.effective_user.id, "button_cancel"), callback_data="cancel_add_channel")])
 
     await update.message.reply_text(
         "\n".join(lines),
@@ -443,10 +414,10 @@ async def add_found_channel(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     if not joined:
         await query.edit_message_text(
-            f"⚠️ Не удалось добавить @{username}: {title_or_error}",
+            _t(update.effective_user.id, "channel_add_failed", username=username, error=title_or_error),
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔍 Искать снова", callback_data=f"search_channels_{feed_id}")],
-                [InlineKeyboardButton("📂 Мои ленты", callback_data="list_feeds")],
+                [InlineKeyboardButton(_t(update.effective_user.id, "button_search_again"), callback_data=f"search_channels_{feed_id}")],
+                [InlineKeyboardButton(_t(update.effective_user.id, "button_my_feeds"), callback_data="list_feeds")],
             ])
         )
         return ConversationHandler.END
@@ -465,13 +436,12 @@ async def add_found_channel(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await telethon_manager.refresh_handlers()
 
     await query.edit_message_text(
-        f"✅ Канал «{title_or_error}» (@{username}) добавлен!\n\n"
-        f"Что дальше?",
+        _t(update.effective_user.id, "channel_added_next", title=title_or_error, username=username),
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔍 Искать ещё", callback_data=f"search_channels_{feed_id}")],
-            [InlineKeyboardButton("➕ Добавить по @username", callback_data=f"manual_add_{feed_id}")],
-            [InlineKeyboardButton("📂 Мои ленты", callback_data="list_feeds")],
-            [InlineKeyboardButton("🏠 В главное меню", callback_data="back_to_main")],
+            [InlineKeyboardButton(_t(update.effective_user.id, "button_search_more"), callback_data=f"search_channels_{feed_id}")],
+            [InlineKeyboardButton(_t(update.effective_user.id, "button_add_by_username"), callback_data=f"manual_add_{feed_id}")],
+            [InlineKeyboardButton(_t(update.effective_user.id, "button_my_feeds"), callback_data="list_feeds")],
+            [InlineKeyboardButton(_t(update.effective_user.id, "button_back_main"), callback_data="back_to_main")],
         ])
     )
     return ConversationHandler.END
@@ -509,7 +479,7 @@ async def suggest_add_to_feed(update: Update, context: ContextTypes.DEFAULT_TYPE
             # Приватный канал без username — показываем ID или title
             logger.info("Forwarded from private channel, no username")
             await update.message.reply_text(
-                "⚠️ Это приватный канал без @username. Добавь его по ссылке (t.me/...) или @username вручную через меню."
+                _t(user_id, "private_channel_no_username")
             )
             return
     
@@ -521,10 +491,10 @@ async def suggest_add_to_feed(update: Update, context: ContextTypes.DEFAULT_TYPE
             callback_data=f"quick_add_{feed['id']}_{username or forward_chat.username or 'unknown'}"
         )])
     
-    keyboard.append([InlineKeyboardButton("❌ Не добавлять", callback_data="quick_add_cancel")])
+    keyboard.append([InlineKeyboardButton(_t(update.effective_user.id, "button_do_not_add"), callback_data="quick_add_cancel")])
     
     await update.message.reply_text(
-        "📥 Куда добавить этот канал?",
+        _t(user_id, "quick_add_where"),
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -534,7 +504,7 @@ async def quick_add_to_feed(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     await query.answer()
     
     if query.data == "quick_add_cancel":
-        await query.edit_message_text("❌ Отменено")
+        await query.edit_message_text(_t(update.effective_user.id, "cancelled"))
         return
     
     # callback_data: quick_add_<feed_id>_<username>
@@ -563,23 +533,23 @@ async def quick_add_to_feed(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                 await telethon_manager.refresh_handlers()
             
             await query.edit_message_text(
-                f"✅ Канал «{title_or_error}» добавлен!",
+                _t(update.effective_user.id, "channel_added", title=title_or_error),
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🏠 В главное меню", callback_data="back_to_main")]
+                    [InlineKeyboardButton(_t(update.effective_user.id, "button_back_main"), callback_data="back_to_main")]
                 ])
             )
         else:
             await query.edit_message_text(
-                f"⚠️ Не удалось добавить @{username}: {title_or_error}",
+                _t(update.effective_user.id, "channel_add_failed", username=username, error=title_or_error),
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🏠 В главное меню", callback_data="back_to_main")]
+                    [InlineKeyboardButton(_t(update.effective_user.id, "button_back_main"), callback_data="back_to_main")]
                 ])
             )
     else:
         await query.edit_message_text(
-            "⚠️ Бот временно недоступен, попробуй позже",
+            _t(update.effective_user.id, "bot_temporarily_unavailable"),
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🏠 В главное меню", callback_data="back_to_main")]
+                [InlineKeyboardButton(_t(update.effective_user.id, "button_back_main"), callback_data="back_to_main")]
             ])
         )
 
