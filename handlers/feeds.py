@@ -16,6 +16,12 @@ def _lang(user_id: int) -> str:
 
 def _t(user_id: int, key: str, **kwargs) -> str:
     return tr(_lang(user_id), key, **kwargs)
+
+
+def _filters_ready_text(user_id: int, feed_name: str, generated_by: str) -> str:
+    if generated_by == "fallback":
+        return _t(user_id, "filters_ready_fallback", feed_name=feed_name)
+    return _t(user_id, "filters_ready_ai", feed_name=feed_name)
 GET_FEED_NAME, GET_FEED_FILTER = range(2)
 GET_EDITED_FILTER = 20
 
@@ -45,7 +51,7 @@ async def get_feed_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     context.user_data["new_feed_name"] = feed_name
 
     waiting_message = await update.message.reply_text(
-        _t(update.effective_user.id, "generating_filters")
+        _t(update.effective_user.id, "generating_filters", feed_name=feed_name)
     )
 
     # --- защита от зависания ИИ ---
@@ -54,7 +60,7 @@ async def get_feed_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             filter_generator.generate_filters(feed_name),
             timeout=30.0
         )
-    except asyncio.TimeoutError:
+    except asyncio.TimeoutError as e:
         logger.error(
             "Filter generation failed: error_type=%s, model=%s, endpoint=%s",
             "timeout",
@@ -62,8 +68,12 @@ async def get_feed_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             "filter_generator.generate_filters",
             exc_info=True
         )
-        result = filter_generator.fallback_result(feed_name, "timeout")
-    except Exception:
+        result = filter_generator.fallback_result(
+            feed_name,
+            "timeout",
+            error_message=str(e) or "Filter generation timed out",
+        )
+    except Exception as e:
         logger.error(
             "Filter generation failed: error_type=%s, model=%s, endpoint=%s",
             "unknown",
@@ -71,7 +81,11 @@ async def get_feed_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             "filter_generator.generate_filters",
             exc_info=True
         )
-        result = filter_generator.fallback_result(feed_name, "unknown")
+        result = filter_generator.fallback_result(
+            feed_name,
+            "unknown",
+            error_message=str(e),
+        )
     # ------------------------------
 
     filters = result["filters"]
@@ -81,21 +95,7 @@ async def get_feed_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     context.user_data["generated_filters"] = filters
 
 
-    if generated_by == "fallback":
-        text = (
-            f"✨ Лента: <b>{feed_name}</b>\n\n"
-            "⚠️ AI-анализ временно недоступен.\n\n"
-            "Возможные причины:\n"
-            "• закончился лимит AI-запросов\n"
-            "• временная ошибка сервиса\n"
-            "• проблема соединения\n\n"
-            "Я использовал стандартные фильтры, чтобы вы могли продолжить работу.\n\n"
-        )
-    else:
-        text = (
-            f"✨ Лента: <b>{feed_name}</b>\n\n"
-            "🤖 AI-фильтры созданы\n\n"
-        )
+    text = _filters_ready_text(update.effective_user.id, feed_name, generated_by)
 
 
     for i, item in enumerate(filters, start=1):
