@@ -9,6 +9,7 @@ from telethon.sessions import StringSession
 from config import API_ID, API_HASH, TELETHON_SESSION
 from services.channel_service import ChannelService
 from services.ai.analyzer import AIAnalyzer
+from services.ai.availability import ai_availability_manager
 
 
 logger = logging.getLogger(__name__)
@@ -259,10 +260,16 @@ class TelethonManager:
 
                 analysis = None
                 if feed.get("ai_filter_enabled", True) and post_id:
-                    analysis = await self.ai_analyzer.analyze_post(
-                        post_text,
-                        feed["topic"]
-                    )
+                    try:
+                        analysis = await self.ai_analyzer.analyze_post(
+                            post_text,
+                            feed["topic"]
+                        )
+                    except Exception as e:
+                        logger.error(f"AI analysis failed; post will not be published via fake fallback: {e}")
+                        await self._start_ai_degradation(ai_availability_manager.get_state().disabled_reason or "provider_error")
+                        continue
+
                     # AI сказал не показывать — пропускаем
                     if not analysis.get("relevant", True):
                         logger.info(f"Пост отфильтрован AI: {analysis.get('filter_reason', 'нет причины')}")
@@ -270,6 +277,7 @@ class TelethonManager:
                             self.channel_service.save_ai_analysis(post_id, analysis)
                         except Exception as e:
                             logger.error(f"Ошибка сохранения AI (отфильтрован): {e}")
+                        ai_availability_manager.record_rejected_post()
                         continue
 
                     # Сохраняем анализ ПЕРЕД отправкой (если упадёт — пост ещё не ушёл)
@@ -297,6 +305,40 @@ class TelethonManager:
                     f"Ошибка обработки поста из {channel_name} для ленты {feed['name']}: {e}",
                     exc_info=True,
                 )
+
+    async def _start_ai_degradation(self, reason: str) -> None:
+        """Disable AI filters temporarily and notify affected users once per incident."""
+        affected_user_ids = self.channel_service.temporarily_disable_ai_filters()
+        if not affected_user_ids:
+            return
+
+        reason_text = {
+            "quota_exceeded": "дневной лимит AI обработки исчерпан",
+            "provider_error": "AI-провайдеры временно недоступны",
+            "timeout": "AI-провайдеры не отвечают вовремя",
+            "unknown": "неизвестная ошибка AI-сервиса",
+        }.get(reason, "неизвестная ошибка AI-сервиса")
+        message = (
+            "⚠️ AI-фильтрация временно отключена.\n\n"
+            f"Причина: {reason_text}.\n\n"
+            "Чтобы продолжать получать новости:\n"
+            "• отключите AI-фильтр вручную в настройках ленты\n\n"
+            "💎 В будущем дополнительные AI-лимиты будут доступны в Premium-подписке."
+        )
+        from services.database import get_connection
+        with get_connection() as conn:
+            row = conn.execute("SELECT notification_sent_at FROM ai_availability WHERE id = 1").fetchone()
+            if row and row["notification_sent_at"]:
+                return
+            conn.execute("UPDATE ai_availability SET notification_sent_at = CURRENT_TIMESTAMP WHERE id = 1")
+            conn.commit()
+
+        for user_id in affected_user_ids:
+            try:
+                await self.bot.send_message(chat_id=user_id, text=message)
+            except Exception as e:
+                logger.warning("Failed to send AI outage notification to %s: %s", user_id, e)
+
     async def _deliver_to_user(
             self,
             feed: dict,

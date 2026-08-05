@@ -19,6 +19,7 @@ def init_db() -> None:
             name TEXT NOT NULL,
             topic TEXT,
             ai_filter_enabled INTEGER DEFAULT 1,
+            temporarily_disabled_by_system INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
@@ -85,6 +86,35 @@ def init_db() -> None:
         )
     ''')
     cursor.execute("""
+        CREATE TABLE IF NOT EXISTS ai_availability (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            is_available INTEGER NOT NULL DEFAULT 1,
+            disabled_reason TEXT,
+            disabled_at TIMESTAMP,
+            last_check_time TIMESTAMP,
+            notification_sent_at TIMESTAMP
+        )
+    """)
+    cursor.execute("""
+        INSERT OR IGNORE INTO ai_availability (id, is_available, last_check_time)
+        VALUES (1, 1, CURRENT_TIMESTAMP)
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS ai_usage_stats (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT NOT NULL UNIQUE,
+            total_requests INTEGER NOT NULL DEFAULT 0,
+            successful_requests INTEGER NOT NULL DEFAULT 0,
+            failed_requests INTEGER NOT NULL DEFAULT 0,
+            rejected_posts INTEGER NOT NULL DEFAULT 0,
+            provider_errors INTEGER NOT NULL DEFAULT 0,
+            input_tokens INTEGER NOT NULL DEFAULT 0,
+            output_tokens INTEGER NOT NULL DEFAULT 0,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS post_ai_analysis (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             post_id INTEGER UNIQUE,
@@ -106,6 +136,17 @@ def init_db() -> None:
             conn.commit()
         except sqlite3.OperationalError:
             pass
+
+    try:
+        cursor.execute("ALTER TABLE feeds ADD COLUMN temporarily_disabled_by_system INTEGER DEFAULT 0")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+    try:
+        cursor.execute("ALTER TABLE ai_usage_stats ADD COLUMN provider_errors INTEGER NOT NULL DEFAULT 0")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
 
     # Отдельная миграция: post_feedback раньше был на channel_id, теперь на post_id
     try:

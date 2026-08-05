@@ -52,7 +52,7 @@ class ChannelService:
         """Возвращает ленты пользователя вместе со списком каналов в каждой."""
         with get_connection() as conn:
             feeds = conn.execute(
-                "SELECT id, name, topic, ai_filter_enabled FROM feeds WHERE user_id = ? ORDER BY id",
+                "SELECT id, name, topic, ai_filter_enabled, temporarily_disabled_by_system FROM feeds WHERE user_id = ? ORDER BY id",
                 (user_id,),
             ).fetchall()
 
@@ -72,6 +72,7 @@ class ChannelService:
                     "name": feed["name"],
                     "topic": feed["topic"],
                     "ai_filter_enabled": bool(feed["ai_filter_enabled"]),
+                    "temporarily_disabled_by_system": bool(feed["temporarily_disabled_by_system"]),
                     "channels": [dict(c) for c in channels],
                 })
             return result
@@ -150,11 +151,35 @@ class ChannelService:
 
             new_value = 0 if row["ai_filter_enabled"] else 1
             conn.execute(
-                "UPDATE feeds SET ai_filter_enabled = ? WHERE id = ? AND user_id = ?",
+                "UPDATE feeds SET ai_filter_enabled = ?, temporarily_disabled_by_system = 0 WHERE id = ? AND user_id = ?",
                 (new_value, feed_id, user_id),
             )
             conn.commit()
             return bool(new_value)
+
+
+    def temporarily_disable_ai_filters(self) -> list[int]:
+        """Disables currently enabled AI filters without losing user intent. Returns affected user ids."""
+        with get_connection() as conn:
+            rows = conn.execute("SELECT DISTINCT user_id FROM feeds WHERE ai_filter_enabled = 1").fetchall()
+            conn.execute("""
+                UPDATE feeds
+                SET ai_filter_enabled = 0, temporarily_disabled_by_system = 1
+                WHERE ai_filter_enabled = 1
+            """)
+            conn.commit()
+            return [r["user_id"] for r in rows]
+
+    def restore_system_disabled_ai_filters(self) -> int:
+        """Restores only AI filters disabled by the system outage/quota flow."""
+        with get_connection() as conn:
+            cursor = conn.execute("""
+                UPDATE feeds
+                SET ai_filter_enabled = 1, temporarily_disabled_by_system = 0
+                WHERE temporarily_disabled_by_system = 1
+            """)
+            conn.commit()
+            return cursor.rowcount
 
     # ---------- настройки пользователя ----------
     def update_feed_filter(self, user_id: int, feed_id: int, new_topic: str) -> bool:
@@ -345,7 +370,7 @@ class ChannelService:
         with get_connection() as conn:
             rows = conn.execute(
                 """
-                SELECT f.id AS feed_id, f.user_id, f.name, f.topic, f.ai_filter_enabled
+                SELECT f.id AS feed_id, f.user_id, f.name, f.topic, f.ai_filter_enabled, f.temporarily_disabled_by_system
                 FROM feeds f
                 JOIN feed_channels fc ON fc.feed_id = f.id
                 JOIN channels c ON c.id = fc.channel_id
@@ -360,7 +385,7 @@ class ChannelService:
         with get_connection() as conn:
             rows = conn.execute(
                 """
-                SELECT f.id AS feed_id, f.user_id, f.name, f.topic, f.ai_filter_enabled
+                SELECT f.id AS feed_id, f.user_id, f.name, f.topic, f.ai_filter_enabled, f.temporarily_disabled_by_system
                 FROM feeds f
                 JOIN feed_channels fc ON fc.feed_id = f.id
                 JOIN channels c ON c.id = fc.channel_id
