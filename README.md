@@ -121,7 +121,6 @@ lentagram-bot/
 │   └── ai/                 # AI модули
 │       ├── analyzer.py     # Анализ контента
 │       ├── classifier.py   # Классификация постов
-│       ├── summarizer.py   # Саммаризация текста
 │       └── llm_client.py   # Клиент для LLM API
 │
 ├── utils/                  # Утилиты
