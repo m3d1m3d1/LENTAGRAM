@@ -2,6 +2,7 @@ import logging
 import sqlite3
 from typing import Optional
 from services.database import get_connection
+from services.i18n import DEFAULT_LANGUAGE, normalize_language
 
 logger = logging.getLogger(__name__)
 
@@ -193,35 +194,54 @@ class ChannelService:
             return cursor.rowcount > 0
             
     def get_user_settings(self, user_id: int) -> dict:
-        """Возвращает настройки пользователя (active_feed_id, show_all_feeds)."""
+        """Возвращает настройки пользователя (active_feed_id, show_all_feeds, language_code)."""
         with get_connection() as conn:
             row = conn.execute(
-                "SELECT active_feed_id, show_all_feeds FROM user_settings WHERE user_id = ?",
+                "SELECT active_feed_id, show_all_feeds, language_code FROM user_settings WHERE user_id = ?",
                 (user_id,),
             ).fetchone()
             if not row:
                 # Создаём дефолтные настройки
                 conn.execute(
-                    "INSERT INTO user_settings (user_id, active_feed_id, show_all_feeds) VALUES (?, NULL, 1)",
-                    (user_id,),
+                    "INSERT INTO user_settings (user_id, active_feed_id, show_all_feeds, language_code) VALUES (?, NULL, 1, ?)",
+                    (user_id, DEFAULT_LANGUAGE),
                 )
                 conn.commit()
-                return {"active_feed_id": None, "show_all_feeds": True}
+                return {"active_feed_id": None, "show_all_feeds": True, "language_code": DEFAULT_LANGUAGE}
             return {
                 "active_feed_id": row["active_feed_id"],
                 "show_all_feeds": bool(row["show_all_feeds"]),
+                "language_code": normalize_language(row["language_code"]),
             }
+
+    def get_user_language(self, user_id: int) -> str:
+        """Возвращает язык интерфейса пользователя, создавая настройки по умолчанию при необходимости."""
+        return self.get_user_settings(user_id)["language_code"]
+
+    def set_user_language(self, user_id: int, language_code: str) -> str:
+        """Сохраняет язык интерфейса пользователя и возвращает нормализованное значение."""
+        language = normalize_language(language_code)
+        with get_connection() as conn:
+            conn.execute(
+                """INSERT INTO user_settings (user_id, active_feed_id, show_all_feeds, language_code)
+                   VALUES (?, NULL, 1, ?)
+                   ON CONFLICT(user_id) DO UPDATE SET
+                   language_code = excluded.language_code""",
+                (user_id, language),
+            )
+            conn.commit()
+        return language
 
     def set_active_feed(self, user_id: int, feed_id: int | None) -> None:
         """Устанавливает активную ленту (None = все ленты)."""
         with get_connection() as conn:
             conn.execute(
-                """INSERT INTO user_settings (user_id, active_feed_id, show_all_feeds)
-                   VALUES (?, ?, ?)
+                """INSERT INTO user_settings (user_id, active_feed_id, show_all_feeds, language_code)
+                   VALUES (?, ?, ?, ?)
                    ON CONFLICT(user_id) DO UPDATE SET
                    active_feed_id = excluded.active_feed_id,
                    show_all_feeds = excluded.show_all_feeds""",
-                (user_id, feed_id, 0 if feed_id else 1),
+                (user_id, feed_id, 0 if feed_id else 1, DEFAULT_LANGUAGE),
             )
             conn.commit()
 
@@ -229,12 +249,12 @@ class ChannelService:
         """Показывать посты из всех лент."""
         with get_connection() as conn:
             conn.execute(
-                """INSERT INTO user_settings (user_id, active_feed_id, show_all_feeds)
-                   VALUES (?, NULL, 1)
+                """INSERT INTO user_settings (user_id, active_feed_id, show_all_feeds, language_code)
+                   VALUES (?, NULL, 1, ?)
                    ON CONFLICT(user_id) DO UPDATE SET
                    active_feed_id = NULL,
                    show_all_feeds = 1""",
-                (user_id,),
+                (user_id, DEFAULT_LANGUAGE),
             )
             conn.commit()
 
