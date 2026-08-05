@@ -1,1 +1,51 @@
-Nothing needs to be added to the .gitignore file based on the provided changes. The modified file 'handlers/channels.py' is a source code file that should not be ignored.
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+
+# Environment variables
+.env
+.env.local
+*.env.*
+!.env.example
+
+# Sessions and databases
+*.session
+*.db
+data/
+
+# Logs
+*.log
+
+# Coverage
+.coverage
+htmlcov/
+coverage/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Build artifacts
+dist/
+build/
+target/
+*.tmp
+
+# MyPy / Pytest cache
+.mypy_cache/
+.pytest_cache/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project-specific: local-only files
+test.py
+telethon_worker.py
