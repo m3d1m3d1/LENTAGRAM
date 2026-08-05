@@ -173,6 +173,9 @@ lentagram-bot/
 | `TELETHON_SESSION` | Сессия Telethon | `""` |
 | `GEMINI_API_KEY` | Ключ Google Gemini API | `None` |
 | `GROQ_API_KEY` | Ключ Groq API | `None` |
+| `AI_DAILY_REQUEST_LIMIT` | Дневной лимит AI-запросов | `1000` |
+| `AI_DAILY_TOKEN_LIMIT` | Дневной лимит AI-токенов | `500000` |
+| `AI_FAILURE_COOLDOWN_SECONDS` | Cooldown после полного отказа AI | `600` |
 | `OPENROUTER_API_KEY` | Ключ OpenRouter API | `None` |
 | `ANTHROPIC_API_KEY` | Ключ Anthropic API | `None` |
 | `LOG_LEVEL` | Уровень логирования | `INFO` |

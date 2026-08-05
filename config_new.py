@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     groq_api_key: Optional[str] = Field(default=None, description="API ключ Groq")
     anthropic_api_key: Optional[str] = Field(default=None, description="API ключ Anthropic")
     
+    # AI квоты и отказоустойчивость
+    ai_daily_request_limit: int = Field(default=1000, description="Дневной лимит AI-запросов")
+    ai_daily_token_limit: int = Field(default=500000, description="Дневной лимит AI-токенов")
+    ai_failure_cooldown_seconds: int = Field(default=600, description="Cooldown после отказа AI в секундах")
+
     # Настройки логирования
     log_level: str = Field(default="INFO", description="Уровень логирования")
     

@@ -3,6 +3,7 @@ import logging
 import re
 
 from services.ai.llm_client import chat_completion
+from services.ai.availability import ai_availability_manager
 
 logger = logging.getLogger(__name__)
 
@@ -44,15 +45,13 @@ class AIAnalyzer:
             '{"relevant":true,"category":"AI","importance":"MEDIUM"}'
         )
 
-        content = await chat_completion(
+        response = await chat_completion(
             messages=[{"role": "user", "content": prompt}],
             temperature=0.2,
             max_tokens=50,
         )
 
-        if not content:
-            return self._fallback()
-
+        content = response.content
         content = content.replace("```json", "").replace("```", "").strip()
         logger.info(f"AI content raw: {content[:300]}")
 
@@ -60,11 +59,13 @@ class AIAnalyzer:
             parsed = json.loads(content)
         except json.JSONDecodeError as e:
             logger.error(f"AI не-JSON: {e}")
-            return self._fallback()
+            ai_availability_manager.mark_unavailable("provider_error")
+            raise RuntimeError("AI returned invalid analysis")
 
         if not isinstance(parsed, dict):
             logger.warning(f"AI вернул не-словарь: {type(parsed)}")
-            return self._fallback()
+            ai_availability_manager.mark_unavailable("provider_error")
+            raise RuntimeError("AI returned invalid analysis")
 
         category = str(parsed.get("category") or "OTHER").upper()
         if category not in CATEGORIES:
@@ -78,6 +79,9 @@ class AIAnalyzer:
             "relevant": bool(parsed.get("relevant", True)),
             "category": category,
             "importance": importance,
+            "input_tokens": response.input_tokens,
+            "output_tokens": response.output_tokens,
+            "provider": response.provider,
         }
 
     def _is_obviously_irrelevant(self, text: str) -> bool:
@@ -88,9 +92,3 @@ class AIAnalyzer:
             return True
         return not TEXT_RE.search(stripped)
 
-    def _fallback(self):
-        return {
-            "relevant": True,
-            "category": "OTHER",
-            "importance": "LOW",
-        }

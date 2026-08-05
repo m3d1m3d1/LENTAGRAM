@@ -2,6 +2,7 @@ import asyncio
 import logging
 import sys
 from pathlib import Path
+from datetime import datetime, timedelta
 
 sys.path.insert(0, str(Path(__file__).parent))
 import socket
@@ -32,6 +33,8 @@ from telegram.ext import (
 from config import TELEGRAM_BOT_TOKEN
 from services.database import init_db
 from services.telethon_client import TelethonManager
+from services.ai.availability import ai_availability_manager
+from services.channel_service import ChannelService
 from handlers import commands
 from handlers import feeds
 from handlers import channels
@@ -170,6 +173,19 @@ def build_application():
     return application
 
 
+
+async def daily_ai_reset_loop() -> None:
+    """Reset AI quotas and restore system-disabled filters every day at 00:00 UTC."""
+    channel_service = ChannelService()
+    while True:
+        now = datetime.utcnow()
+        tomorrow = (now + timedelta(days=1)).date()
+        next_midnight = datetime.combine(tomorrow, datetime.min.time())
+        await asyncio.sleep((next_midnight - now).total_seconds())
+        ai_availability_manager.reset_daily()
+        restored = channel_service.restore_system_disabled_ai_filters()
+        logger.info("Daily AI reset completed; restored_filters=%s", restored)
+
 async def run() -> None:
     init_db()
     application = build_application()
@@ -179,6 +195,7 @@ async def run() -> None:
 
     await application.initialize()
     await application.start()
+    daily_ai_reset_task = asyncio.create_task(daily_ai_reset_loop())
 
     logger.info("=== Application started ===")
 
@@ -217,6 +234,11 @@ async def run() -> None:
 
         try:
             await application.shutdown()
+        except Exception:
+            pass
+
+        try:
+            daily_ai_reset_task.cancel()
         except Exception:
             pass
 
