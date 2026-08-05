@@ -33,8 +33,13 @@ class FilterGenerator:
         }
     ]
 
-    def fallback_result(self, feed_name: str, error_type: str = "unknown") -> dict:
-        return {
+    def fallback_result(
+        self,
+        feed_name: str,
+        error_type: str = "unknown",
+        error_message: str | None = None,
+    ) -> dict:
+        result = {
             "generated_by": "fallback",
             "error_type": error_type,
             "topic": feed_name,
@@ -46,6 +51,9 @@ class FilterGenerator:
                 for item in self.FALLBACK_FILTERS
             ]
         }
+        if error_message:
+            result["error_message"] = error_message
+        return result
 
     def _classify_error(self, error: Exception) -> str:
         if isinstance(error, (TimeoutError, asyncio.TimeoutError)):
@@ -247,4 +255,4 @@ ai_prompt:
                 "chat_completion",
                 exc_info=True
             )
-            return self.fallback_result(feed_name, error_type)
+            return self.fallback_result(feed_name, error_type, error_message=str(e))

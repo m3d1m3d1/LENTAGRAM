@@ -108,5 +108,7 @@
   "filter_save_failed": "⚠️ Couldn’t save filter — feed not found or already deleted.",
   "button_to_feed_channels": "📡 To feed channels",
   "filter_updated": "✅ Filter for feed “{feed_name}” updated.",
-  "edit_cancelled": "❌ Editing cancelled"
+  "edit_cancelled": "❌ Editing cancelled",
+  "filters_ready_ai": "✨ Feed: <b>{feed_name}</b>\n\n🤖 I prepared AI filter options:\n\n",
+  "filters_ready_fallback": "✨ Feed: <b>{feed_name}</b>\n\n⚠️ AI analysis is temporarily unavailable.\n\nPossible reasons:\n• AI request limit was reached\n• temporary provider error\n• connection issue\n\nI prepared standard filters so you can continue:\n\n"
 }
