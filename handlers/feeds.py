@@ -45,7 +45,7 @@ async def get_feed_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     context.user_data["new_feed_name"] = feed_name
 
     waiting_message = await update.message.reply_text(
-        _t(update.effective_user.id, "generating_filters", feed_name=feed_name)
+        _t(update.effective_user.id, "generating_filters")
     )
 
     # --- защита от зависания ИИ ---
@@ -54,62 +54,48 @@ async def get_feed_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             filter_generator.generate_filters(feed_name),
             timeout=30.0
         )
-
-        filters = result["filters"]
-        logger.info(f"Тип первого элемента: {type(filters[0])}")
     except asyncio.TimeoutError:
-        logger.error("Timeout в generate_filters")
-        filters = [
-            {
-                "title": "Широкий",
-                "description": f"Все новости по теме «{feed_name}».",
-                "strictness": 3,
-                "ai_prompt": f"Показывай все новости по теме {feed_name}."
-            },
-            {
-                "title": "Сбалансированный",
-                "description": f"Только важные новости по теме «{feed_name}».",
-                "strictness": 6,
-                "ai_prompt": f"Показывай только полезные и значимые новости по теме {feed_name}."
-            },
-            {
-                "title": "Строгий",
-                "description": f"Только самые важные события по теме «{feed_name}».",
-                "strictness": 9,
-                "ai_prompt": f"Показывай только самые важные события по теме {feed_name}. Игнорируй второстепенные публикации."
-            }
-        ]
-    except Exception as e:
-        logger.exception("Ошибка в generate_filters")
-        filters = [
-            {
-                "title": "Широкий",
-                "description": f"Все новости по теме «{feed_name}».",
-                "strictness": 3,
-                "ai_prompt": f"Показывай все новости по теме {feed_name}."
-            },
-            {
-                "title": "Сбалансированный",
-                "description": f"Только важные новости по теме «{feed_name}».",
-                "strictness": 6,
-                "ai_prompt": f"Показывай только полезные и значимые новости по теме {feed_name}."
-            },
-            {
-                "title": "Строгий",
-                "description": f"Только самые важные события по теме «{feed_name}».",
-                "strictness": 9,
-                "ai_prompt": f"Показывай только самые важные события по теме {feed_name}. Игнорируй второстепенные публикации."
-            }
-        ]
+        logger.error(
+            "Filter generation failed: error_type=%s, model=%s, endpoint=%s",
+            "timeout",
+            "configured AI provider chain",
+            "filter_generator.generate_filters",
+            exc_info=True
+        )
+        result = filter_generator.fallback_result(feed_name, "timeout")
+    except Exception:
+        logger.error(
+            "Filter generation failed: error_type=%s, model=%s, endpoint=%s",
+            "unknown",
+            "configured AI provider chain",
+            "filter_generator.generate_filters",
+            exc_info=True
+        )
+        result = filter_generator.fallback_result(feed_name, "unknown")
     # ------------------------------
+
+    filters = result["filters"]
+    generated_by = result.get("generated_by", "ai")
+    logger.info("Filter generation source: %s", generated_by)
 
     context.user_data["generated_filters"] = filters
 
 
-    text = (
-        f"✨ Лента: <b>{feed_name}</b>\n\n"
-        "🤖 Я подготовил варианты ИИ-фильтра:\n\n"
-    )
+    if generated_by == "fallback":
+        text = (
+            f"✨ Лента: <b>{feed_name}</b>\n\n"
+            "⚠️ AI-анализ временно недоступен.\n\n"
+            "Возможные причины:\n"
+            "• закончился лимит AI-запросов\n"
+            "• временная ошибка сервиса\n"
+            "• проблема соединения\n\n"
+            "Я использовал стандартные фильтры, чтобы вы могли продолжить работу.\n\n"
+        )
+    else:
+        text = (
+            f"✨ Лента: <b>{feed_name}</b>\n\n"
+            "🤖 AI-фильтры созданы\n\n"
+        )
 
 
     for i, item in enumerate(filters, start=1):

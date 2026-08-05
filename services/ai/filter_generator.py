@@ -1,5 +1,8 @@
+import asyncio
 import json
 import logging
+
+import aiohttp
 
 from services.ai.llm_client import chat_completion
 
@@ -8,6 +11,58 @@ logger = logging.getLogger(__name__)
 
 
 class FilterGenerator:
+
+    FALLBACK_FILTERS = [
+        {
+            "title": "Широкий",
+            "description": "Все новости по теме.",
+            "strictness": 3,
+            "ai_prompt": "Показывай все новости по теме {feed_name}."
+        },
+        {
+            "title": "Сбалансированный",
+            "description": "Только важные и полезные новости.",
+            "strictness": 6,
+            "ai_prompt": "Показывай только полезные и значимые новости по теме {feed_name}. Игнорируй рекламу и спам."
+        },
+        {
+            "title": "Строгий",
+            "description": "Только самые важные события.",
+            "strictness": 9,
+            "ai_prompt": "Показывай только самые важные события по теме {feed_name}. Игнорируй второстепенные публикации."
+        }
+    ]
+
+    def fallback_result(self, feed_name: str, error_type: str = "unknown") -> dict:
+        return {
+            "generated_by": "fallback",
+            "error_type": error_type,
+            "topic": feed_name,
+            "filters": [
+                {
+                    **item,
+                    "ai_prompt": item["ai_prompt"].format(feed_name=feed_name)
+                }
+                for item in self.FALLBACK_FILTERS
+            ]
+        }
+
+    def _classify_error(self, error: Exception) -> str:
+        if isinstance(error, (TimeoutError, asyncio.TimeoutError)):
+            return "timeout"
+        if isinstance(error, aiohttp.ClientError):
+            return "provider_error"
+
+        message = str(error).lower()
+        if "timeout" in message:
+            return "timeout"
+        if "quota" in message or "429" in message or "rate limit" in message:
+            return "quota_exceeded"
+        if "unavailable" in message or "недоступ" in message:
+            return "unavailable"
+        if "provider" in message:
+            return "provider_error"
+        return "unknown"
 
     async def generate_filters(self, feed_name: str):
 
@@ -168,44 +223,28 @@ ai_prompt:
 
 
         try:
-            content = await chat_completion(
+            response = await chat_completion(
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.4,
                 max_tokens=3000,
             )
 
+            content = getattr(response, "content", response)
             if not content:
                 raise RuntimeError("Все AI-провайдеры недоступны")
 
             content = content.replace("```json", "").replace("```", "").strip()
-            return json.loads(content)
+            result = json.loads(content)
+            result["generated_by"] = "ai"
+            return result
 
         except Exception as e:
-
+            error_type = self._classify_error(e)
             logger.error(
-                f"Filter generation error: {e}"
+                "Filter generation failed: error_type=%s, model=%s, endpoint=%s",
+                error_type,
+                "configured AI provider chain",
+                "chat_completion",
+                exc_info=True
             )
-
-            return {
-                "topic": feed_name,
-                "filters": [
-                    {
-                        "title": "Широкий",
-                        "description": "Все новости по теме.",
-                        "strictness": 3,
-                        "ai_prompt": f"Показывай все новости по теме {feed_name}."
-                    },
-                    {
-                        "title": "Сбалансированный",
-                        "description": "Только важные и полезные новости.",
-                        "strictness": 6,
-                        "ai_prompt": f"Показывай только полезные и значимые новости по теме {feed_name}. Игнорируй рекламу и спам."
-                    },
-                    {
-                        "title": "Строгий",
-                        "description": "Только самые важные события.",
-                        "strictness": 9,
-                        "ai_prompt": f"Показывай только самые важные события по теме {feed_name}. Игнорируй второстепенные публикации."
-                    }
-                ]
-            }
+            return self.fallback_result(feed_name, error_type)
