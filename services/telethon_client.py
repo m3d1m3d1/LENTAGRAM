@@ -330,9 +330,7 @@ class TelethonManager:
         if ai_analysis:
             ai_block = (
                 f"🤖 Категория: {ai_analysis.get('category', 'не определена')}\n"
-                f"⭐ Важность: {ai_analysis.get('importance', '?')}/10\n\n"
-                f"📝 Кратко:\n"
-                f"{ai_analysis.get('summary', '')}\n\n"
+                f"⭐ Важность: {ai_analysis.get('importance', '?')}\n\n"
             )
 
 

@@ -1,6 +1,5 @@
 import logging
 import sqlite3
-import json
 from typing import Optional
 from services.database import get_connection
 
@@ -27,23 +26,14 @@ class ChannelService:
                 (
                     post_id,
                     category,
-                    summary,
-                    importance,
-                    importance_reason,
-                    keywords
+                    importance
                 )
-                VALUES (?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?)
                 """,
                 (
                     post_id,
                     analysis.get("category"),
-                    analysis.get("summary"),
-                    analysis.get("importance"),
-                    analysis.get("importance_reason"),
-                    json.dumps(
-                        analysis.get("keywords", []),
-                        ensure_ascii=False
-                    )
+                    analysis.get("importance")
                 )
             )
 

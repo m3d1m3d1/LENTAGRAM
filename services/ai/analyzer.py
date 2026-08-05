@@ -1,9 +1,16 @@
-import logging
 import json
+import logging
+import re
 
 from services.ai.llm_client import chat_completion
 
 logger = logging.getLogger(__name__)
+
+POST_PREVIEW_LIMIT = 600
+CATEGORIES = {"AI", "TECH", "WAR", "BUSINESS", "SPORT", "SCIENCE", "FINANCE", "OTHER"}
+IMPORTANCE_LEVELS = {"HIGH", "MEDIUM", "LOW"}
+URL_ONLY_RE = re.compile(r"^(?:https?://\S+|www\.\S+)(?:\s+(?:https?://\S+|www\.\S+))*$", re.IGNORECASE)
+TEXT_RE = re.compile(r"[\wА-Яа-яЁё]", re.UNICODE)
 
 
 class AIAnalyzer:
@@ -12,32 +19,35 @@ class AIAnalyzer:
     Анализирует Telegram посты:
     - релевантность;
     - категорию;
-    - краткое содержание;
-    - важность;
-    - ключевые слова.
+    - важность.
 
     Использует общий клиент с fallback Gemini -> Groq.
     """
 
     async def analyze_post(self, text: str, filter_prompt: str | None = None):
-        rules = filter_prompt or "нет специальных правил — пропускать всё"
+        if self._is_obviously_irrelevant(text):
+            return {
+                "relevant": False,
+                "category": "OTHER",
+                "importance": "LOW",
+            }
+
+        rules = filter_prompt or "No special rules; accept all useful posts."
+        post_preview = text[:POST_PREVIEW_LIMIT]
 
         prompt = (
-            "Ты — AI-фильтр Telegram-ленты. Ответь СТРОГО JSON без markdown.\n\n"
-            "Задача:\n"
-            "1. Определи, подходит ли пост под правила пользователя.\n"
-            "2. Если подходит: relevant=true, дай категорию, summary (1-2 предложения), важность 1-10, причину важности, 3-5 ключевых слов.\n"
-            "3. Если НЕ подходит: relevant=false, остальные поля пустые/null.\n\n"
-            f"Правила фильтра: {rules}\n\n"
-            f"Текст поста:\n{text[:2000]}\n\n"
-            "Верни ТОЛЬКО JSON:\n"
-            '{"relevant":true,"category":"IT","summary":"краткий пересказ","importance":7,"importance_reason":"почему важно","keywords":["слово1","слово2"]}'
+            "Classify this Telegram post for a user feed. Return JSON only. "
+            "Fields: relevant boolean; category one of AI,TECH,WAR,BUSINESS,SPORT,SCIENCE,FINANCE,OTHER only; "
+            "importance one of HIGH,MEDIUM,LOW only.\n"
+            f"Rules: {rules}\n"
+            f"Post: {post_preview}\n"
+            '{"relevant":true,"category":"AI","importance":"MEDIUM"}'
         )
 
         content = await chat_completion(
             messages=[{"role": "user", "content": prompt}],
             temperature=0.2,
-            max_tokens=500,
+            max_tokens=50,
         )
 
         if not content:
@@ -56,24 +66,31 @@ class AIAnalyzer:
             logger.warning(f"AI вернул не-словарь: {type(parsed)}")
             return self._fallback()
 
-        raw_importance = parsed.get("importance")
-        importance = int(raw_importance) if raw_importance is not None else 1
+        category = str(parsed.get("category") or "OTHER").upper()
+        if category not in CATEGORIES:
+            category = "OTHER"
+
+        importance = str(parsed.get("importance") or "LOW").upper()
+        if importance not in IMPORTANCE_LEVELS:
+            importance = "LOW"
 
         return {
             "relevant": bool(parsed.get("relevant", True)),
-            "category": parsed.get("category"),
-            "summary": parsed.get("summary"),
+            "category": category,
             "importance": importance,
-            "importance_reason": parsed.get("importance_reason"),
-            "keywords": parsed.get("keywords") or [],
         }
+
+    def _is_obviously_irrelevant(self, text: str) -> bool:
+        stripped = (text or "").strip()
+        if len(stripped) < 20:
+            return True
+        if URL_ONLY_RE.fullmatch(stripped):
+            return True
+        return not TEXT_RE.search(stripped)
 
     def _fallback(self):
         return {
             "relevant": True,
-            "category": None,
-            "summary": None,
-            "importance": 1,
-            "importance_reason": "Не удалось выполнить AI-анализ",
-            "keywords": []
+            "category": "OTHER",
+            "importance": "LOW",
         }

@@ -89,10 +89,7 @@ def init_db() -> None:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             post_id INTEGER UNIQUE,
             category TEXT,
-            summary TEXT,
-            importance INTEGER,
-            importance_reason TEXT,
-            keywords TEXT,
+            importance TEXT,
 
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
