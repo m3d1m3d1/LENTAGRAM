@@ -1,43 +1,36 @@
-
+```
 # Python
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-venv/
-.venv/
 *.pyc
 *.pyo
 *.pyd
 
-# Environment variables
 # Dependencies
 .venv/
 venv/
 env/
 .env
 .env.local
-*.env.*
-!.env.example
-
-# Sessions and databases
-*.session
-*.db
-data/
 .env.*
 
 # Logs
 *.log
 
-# Coverage
+# Temporary files
+*.tmp
+*.swp
+*~
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Coverage reports
 .coverage
 htmlcov/
 coverage/
-htmlcov/
 
 # IDE
-.idea/
 .vscode/
 .idea/
 *.swp
@@ -46,18 +39,13 @@ htmlcov/
 # Build artifacts
 dist/
 build/
-target/
-*.tmp
+*.so
+*.dylib
+*.dll
+*.exe
+*.out
 
-# MyPy / Pytest cache
-.mypy_cache/
+# Testing
 .pytest_cache/
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Project-specific: local-only files
-test.py
-telethon_worker.py
+.mypy_cache/
 ```

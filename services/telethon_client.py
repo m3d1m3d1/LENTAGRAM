@@ -281,8 +281,8 @@ class TelethonManager:
 
 
         if not channel_db_id:
-            logger.debug(
-                f"Channel {channel_id} not registered"
+            logger.warning(
+                f"Channel {channel_id} not registered in database"
             )
             return
 
@@ -297,6 +297,9 @@ class TelethonManager:
 
 
         if not user_ids:
+            logger.warning(
+                f"No users subscribed to channel {channel_id} (db_id={channel_db_id})"
+            )
             return
 
 
@@ -395,7 +398,9 @@ class TelethonManager:
 
 
         if not candidate_feeds:
-
+            logger.warning(
+                f"No feeds found for user {user_id} on channel {channel_db_id}"
+            )
             return
 
 
@@ -438,7 +443,10 @@ class TelethonManager:
 
 
         if not filtered_feeds:
-
+            logger.warning(
+                f"All feeds filtered out for user {user_id} "
+                f"(active_id={active_id}, show_all={show_all})"
+            )
             return
 
 
@@ -496,11 +504,9 @@ class TelethonManager:
 
 
         if not selected_feed:
-
-            logger.info(
-                "No suitable feed selected"
+            logger.warning(
+                f"No suitable feed selected by AI for user {user_id}"
             )
-
             return
 
 
@@ -523,7 +529,9 @@ class TelethonManager:
 
 
         if not post_id:
-
+            logger.warning(
+                f"Failed to save post for feed {selected_feed['feed_id']}"
+            )
             return
 
 
@@ -582,9 +590,8 @@ class TelethonManager:
                 "relevant",
                 True
             ):
-
                 logger.info(
-                    "Post rejected by AI"
+                    f"Post rejected by AI for user {user_id}"
                 )
 
 
