@@ -291,7 +291,7 @@ class TelethonManager:
         user_ids = (
             self.channel_service
             .get_users_subscribed_to_channel(
-                channel_db_id
+                channel_id
             )
         )
 
