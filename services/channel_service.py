@@ -372,7 +372,7 @@ class ChannelService:
             """, (channel_id,)).fetchall()
             return [r["user_id"] for r in rows]
 
-    def get_user_feeds_for_channel(self, user_id: int, channel_id: int) -> list[dict]:
+    def get_user_feeds_for_channel(self, user_id: int, channel_db_id: int) -> list[dict]:
         """
         Возвращает все ленты пользователя, содержащие данный канал.
         Результат включает feed_id, name, topic, ai_filter_enabled и created_at.
@@ -385,9 +385,9 @@ class ChannelService:
                 FROM feeds f
                 JOIN feed_channels fc ON fc.feed_id = f.id
                 JOIN channels c ON c.id = fc.channel_id
-                WHERE f.user_id = ? AND c.channel_id = ?
+                WHERE f.user_id = ? AND c.id = ?
                 ORDER BY fc.created_at ASC
-            """, (user_id, channel_id)).fetchall()
+            """, (user_id, channel_db_id)).fetchall()
             return [dict(r) for r in rows]
 
     def remove_channel_from_feed(self, feed_id: int, username: str) -> bool:

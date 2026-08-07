@@ -1,4 +1,3 @@
-
 # Python
 __pycache__/
 *.py[cod]
@@ -60,4 +59,10 @@ Thumbs.db
 # Project-specific: local-only files
 test.py
 telethon_worker.py
-```
+
+*.so
+*.dylib
+*.dll
+*.exe
+*.out
+.mypy_cache/
