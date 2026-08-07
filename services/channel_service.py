@@ -360,6 +360,36 @@ class ChannelService:
                 conn.rollback()
                 return False
 
+    def get_users_subscribed_to_channel(self, channel_id: int) -> list[int]:
+        """Возвращает список user_id пользователей, у которых есть ленты с этим каналом."""
+        with get_connection() as conn:
+            rows = conn.execute("""
+                SELECT DISTINCT f.user_id
+                FROM feeds f
+                JOIN feed_channels fc ON fc.feed_id = f.id
+                JOIN channels c ON c.id = fc.channel_id
+                WHERE c.channel_id = ?
+            """, (channel_id,)).fetchall()
+            return [r["user_id"] for r in rows]
+
+    def get_user_feeds_for_channel(self, user_id: int, channel_id: int) -> list[dict]:
+        """
+        Возвращает все ленты пользователя, содержащие данный канал.
+        Результат включает feed_id, name, topic, ai_filter_enabled и created_at.
+        """
+        with get_connection() as conn:
+            rows = conn.execute("""
+                SELECT f.id AS feed_id, f.user_id, f.name, f.topic, 
+                       f.ai_filter_enabled, f.temporarily_disabled_by_system,
+                       fc.created_at
+                FROM feeds f
+                JOIN feed_channels fc ON fc.feed_id = f.id
+                JOIN channels c ON c.id = fc.channel_id
+                WHERE f.user_id = ? AND c.channel_id = ?
+                ORDER BY fc.created_at ASC
+            """, (user_id, channel_id)).fetchall()
+            return [dict(r) for r in rows]
+
     def remove_channel_from_feed(self, feed_id: int, username: str) -> bool:
         username = username.lower().strip("@")
         with get_connection() as conn:

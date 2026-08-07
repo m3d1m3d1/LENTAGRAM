@@ -38,6 +38,7 @@ def init_db() -> None:
         CREATE TABLE IF NOT EXISTS feed_channels (
             feed_id INTEGER NOT NULL,
             channel_id INTEGER NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (feed_id, channel_id),
             FOREIGN KEY (feed_id) REFERENCES feeds(id) ON DELETE CASCADE,
             FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE CASCADE

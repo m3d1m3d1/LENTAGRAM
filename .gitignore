@@ -1,3 +1,4 @@
+
 # Python
 __pycache__/
 *.py[cod]
@@ -6,8 +7,15 @@ __pycache__/
 .Python
 venv/
 .venv/
+*.pyc
+*.pyo
+*.pyd
 
 # Environment variables
+# Dependencies
+.venv/
+venv/
+env/
 .env
 .env.local
 *.env.*
@@ -17,6 +25,7 @@ venv/
 *.session
 *.db
 data/
+.env.*
 
 # Logs
 *.log
@@ -25,10 +34,12 @@ data/
 .coverage
 htmlcov/
 coverage/
+htmlcov/
 
 # IDE
 .idea/
 .vscode/
+.idea/
 *.swp
 *.swo
 
@@ -49,3 +60,4 @@ Thumbs.db
 # Project-specific: local-only files
 test.py
 telethon_worker.py
+```
