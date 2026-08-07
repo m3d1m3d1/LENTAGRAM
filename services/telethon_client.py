@@ -10,6 +10,7 @@ from config import API_ID, API_HASH, TELETHON_SESSION
 from services.channel_service import ChannelService
 from services.ai.analyzer import AIAnalyzer
 from services.ai.availability import ai_availability_manager
+from services.feed_selector import FeedSelector
 
 
 logger = logging.getLogger(__name__)
@@ -60,6 +61,7 @@ class TelethonManager:
         self.bot = bot
         self.channel_service = ChannelService()
         self.ai_analyzer = AIAnalyzer()
+        self.feed_selector = FeedSelector()
         self._started = False
         self._runner_task = None
 
@@ -185,22 +187,21 @@ class TelethonManager:
 
         if not event.is_channel:
             return
-        ...
-
+        
         channel_id = event.chat.id
         logger.info(f"ПОЛУЧЕНО СООБЩЕНИЕ: channel={channel_id}, is_channel=True")
 
-        feeds = self.channel_service.get_feeds_by_channel_id(channel_id)
-        logger.info(f"Канал {channel_id}: найдено {len(feeds)} лент")
+        # Получаем внутренний ID канала из БД
+        channel_db_id = self.channel_service.get_channel_db_id(channel_id)
+        if not channel_db_id:
+            logger.warning(f"Канал {channel_id} не найден в БД")
+            return
 
-        # FALLBACK: если по channel_id не нашли — ищем по username
-        if not feeds:
-            username = getattr(event.chat, "username", None)
-            if username:
-                logger.info(f"Fallback по username: @{username}")
-                feeds = self.channel_service.get_feeds_for_channel(username)
+        # Находим всех пользователей, у которых есть ленты с этим каналом
+        user_ids = self.channel_service.get_users_subscribed_to_channel(channel_db_id)
+        logger.info(f"Найдено {len(user_ids)} пользователей, подписанных на канал {channel_id}")
 
-        if not feeds:
+        if not user_ids:
             logger.info(f"Канал {channel_id} не привязан ни к одной ленте")
             return
 
@@ -224,87 +225,155 @@ class TelethonManager:
             # Telethon обычно отправляет первое сообщение альбома с полным текстом
             pass  # Продолжаем обработку
 
-        # Получаем внутренний ID канала из БД
-        channel_db_id = self.channel_service.get_channel_db_id(channel_id)
-        if not channel_db_id:
-            logger.warning(f"Канал {channel_id} не найден в БД")
+        # Обрабатываем для каждого пользователя отдельно
+        for user_id in user_ids:
+            await self._process_for_user(
+                user_id=user_id,
+                channel_db_id=channel_db_id,
+                channel_name=channel_name,
+                post_text=post_text,
+                post_link=post_link,
+                message=event.message,
+            )
+
+    async def _process_for_user(
+        self,
+        user_id: int,
+        channel_db_id: int,
+        channel_name: str,
+        post_text: str,
+        post_link: str,
+        message,
+    ) -> None:
+        """
+        Обрабатывает пост для одного пользователя.
+        
+        1. Находит все ленты пользователя, содержащие этот канал
+        2. Проверяет настройки активности лент
+        3. Выбирает одну целевую ленту (через FeedSelector)
+        4. Выполняет AI-анализ только для выбранной ленты
+        5. Отправляет пост один раз
+        """
+        logger.info(f"Обработка для пользователя {user_id}")
+        
+        # Получаем все ленты пользователя с этим каналом
+        candidate_feeds = self.channel_service.get_user_feeds_for_channel(user_id, channel_db_id)
+        logger.info(f"Пользователь {user_id} имеет {len(candidate_feeds)} подходящих лент")
+        
+        if not candidate_feeds:
+            logger.info(f"У пользователя {user_id} нет лент с каналом {channel_db_id}")
             return
         
+        # Фильтруем неактивные ленты согласно настройкам пользователя
+        user_settings = self.channel_service.get_user_settings(user_id)
+        active_id = user_settings["active_feed_id"]
+        show_all = user_settings["show_all_feeds"]
         
-        for feed in feeds:
-
-            # ПРОВЕРЯЕМ: активна ли эта лента для пользователя?
-            user_settings = self.channel_service.get_user_settings(feed["user_id"])
-            active_id = user_settings["active_feed_id"]
-            show_all = user_settings["show_all_feeds"]
-
+        filtered_feeds = []
+        for feed in candidate_feeds:
             # Если выбрана конкретная лента и это не она — пропускаем
             if not show_all and active_id is not None and active_id != feed["feed_id"]:
-                logger.info(f"Лента {feed['name']} не активна для юзера {feed['user_id']}, пропускаем")
+                logger.info(f"Лента {feed['name']} не активна для юзера {user_id}, пропускаем")
                 continue
-
-            # Проверяем дубли - для альбомов используем grouped_id если есть
-            check_message_id = event.message.id
+            filtered_feeds.append(feed)
+        
+        if not filtered_feeds:
+            logger.info(f"Все ленты пользователя {user_id} отфильтрованы по настройкам активности")
+            return
+        
+        candidate_feeds = filtered_feeds
+        
+        # Проверяем, был ли уже отправлен этот пост в какую-либо из лент пользователя
+        check_message_id = message.id
+        already_sent = False
+        for feed in candidate_feeds:
             if self.channel_service.is_post_sent(feed["feed_id"], channel_db_id, check_message_id):
-                logger.info(f"Пост {check_message_id} уже отправлен в ленту {feed['name']}")
-                continue
-
+                logger.info(f"Пост {check_message_id} уже отправлен в ленту {feed['name']} для пользователя {user_id}")
+                already_sent = True
+                break
+        
+        if already_sent:
+            return
+        
+        # Выбираем целевую ленту через FeedSelector
+        ai_enabled = any(f.get("ai_filter_enabled", True) for f in candidate_feeds)
+        logger.info(f"AI {'включен' if ai_enabled else 'выключен'} для пользователя {user_id}")
+        
+        selected_feed = await self.feed_selector.choose_feed(
+            post_text=post_text,
+            candidate_feeds=candidate_feeds,
+            ai_enabled=ai_enabled,
+        )
+        
+        if not selected_feed:
+            logger.warning(f"Не удалось выбрать ленту для пользователя {user_id}")
+            return
+        
+        logger.info(f"Выбрана лента feed_id={selected_feed['feed_id']} ({selected_feed['name']}) для доставки")
+        
+        # Сохраняем пост в БД для выбранной ленты
+        try:
+            post_id = self.channel_service.save_post(
+                selected_feed["feed_id"],
+                channel_db_id,
+                check_message_id,
+                post_text
+            )
+            logger.info(f"POST SAVED id={post_id}")
+            
+            if post_id is None:
+                logger.warning(f"Не удалось сохранить пост для пользователя {user_id}")
+                return
+                
+        except Exception as e:
+            logger.error(f"Ошибка сохранения поста: {e}", exc_info=True)
+            return
+        
+        # Выполняем AI-анализ только если он включен для выбранной ленты
+        analysis = None
+        if selected_feed.get("ai_filter_enabled", True):
             try:
-                post_id = self.channel_service.save_post(
-                    feed["feed_id"],
-                    channel_db_id,
-                    check_message_id,
-                    post_text
+                analysis = await self.ai_analyzer.analyze_post(
+                    post_text,
+                    selected_feed.get("topic")
                 )
-                logger.info(f"POST SAVED id={post_id}")
-
-                analysis = None
-                if feed.get("ai_filter_enabled", True) and post_id:
-                    try:
-                        analysis = await self.ai_analyzer.analyze_post(
-                            post_text,
-                            feed["topic"]
-                        )
-                    except Exception as e:
-                        logger.error(f"AI analysis failed; post will not be published via fake fallback: {e}")
-                        await self._start_ai_degradation(ai_availability_manager.get_state().disabled_reason or "provider_error")
-                        continue
-
-                    # AI сказал не показывать — пропускаем
-                    if not analysis.get("relevant", True):
-                        logger.info(f"Пост отфильтрован AI: {analysis.get('filter_reason', 'нет причины')}")
-                        try:
-                            self.channel_service.save_ai_analysis(post_id, analysis)
-                        except Exception as e:
-                            logger.error(f"Ошибка сохранения AI (отфильтрован): {e}")
-                        ai_availability_manager.record_rejected_post()
-                        continue
-
-                    # Сохраняем анализ ПЕРЕД отправкой (если упадёт — пост ещё не ушёл)
-                    if post_id and analysis:
-                        try:
-                            self.channel_service.save_ai_analysis(post_id, analysis)
-                        except Exception as e:
-                            logger.error(f"Ошибка сохранения AI-анализа: {e}")
-                            # Не прерываем отправку из-за ошибки БД
-
-                    # Отправляем пост пользователю
-                    await self._deliver_to_user(
-                        feed,
-                        channel_name,
-                        post_text,
-                        post_link,
-                        event.message,
-                        channel_db_id,
-                        analysis,
-                        post_id
-                    )
-
+                logger.info(f"AI анализ завершен: relevant={analysis.get('relevant', True)}, category={analysis.get('category')}")
+                
             except Exception as e:
-                logger.error(
-                    f"Ошибка обработки поста из {channel_name} для ленты {feed['name']}: {e}",
-                    exc_info=True,
-                )
+                logger.error(f"AI analysis failed; post will not be published via fake fallback: {e}")
+                await self._start_ai_degradation(ai_availability_manager.get_state().disabled_reason or "provider_error")
+                return
+            
+            # AI сказал не показывать — пропускаем
+            if not analysis.get("relevant", True):
+                logger.info(f"Пост отфильтрован AI: {analysis.get('filter_reason', 'нет причины')}")
+                try:
+                    self.channel_service.save_ai_analysis(post_id, analysis)
+                except Exception as e:
+                    logger.error(f"Ошибка сохранения AI (отфильтрован): {e}")
+                ai_availability_manager.record_rejected_post()
+                return
+            
+            # Сохраняем AI-анализ
+            try:
+                self.channel_service.save_ai_analysis(post_id, analysis)
+            except Exception as e:
+                logger.error(f"Ошибка сохранения AI-анализа: {e}")
+                # Не прерываем отправку из-за ошибки БД
+        
+        # Отправляем пост пользователю (один вызов)
+        await self._deliver_to_user(
+            selected_feed,
+            channel_name,
+            post_text,
+            post_link,
+            message,
+            channel_db_id,
+            analysis,
+            post_id
+        )
+        
+        logger.info(f"Сообщение успешно доставлено пользователю {user_id}")
 
     async def _start_ai_degradation(self, reason: str) -> None:
         """Disable AI filters temporarily and notify affected users once per incident."""
